@@ -65,7 +65,14 @@ public class SyncController : Controller
 			PelotonDownloadSuccess = syncResult.PelotonDownloadSuccess,
 			ConverToFitSuccess = syncResult.ConversionSuccess,
 			UploadToGarminSuccess = syncResult.UploadToGarminSuccess,
-			Errors = syncResult.Errors.Select(e => new Contract.ErrorResponse(e.Message)).ToList()
+			Errors = syncResult.Errors.Select(e => new Contract.ErrorResponse(e.Message)).ToList(),
+			MergeResults = syncResult.MergeResults.Select(r => new SyncMergeResultItem
+			{
+				PelotonWorkoutId = r.PelotonWorkoutId,
+				PelotonWorkoutTitle = r.PelotonWorkoutTitle,
+				GarminActivityId = r.GarminActivityId,
+				GarminActivityName = r.GarminActivityName,
+			}).ToList(),
 		};
 
 		if (!response.SyncSuccess)

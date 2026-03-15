@@ -14,15 +14,6 @@ namespace Common;
 
 public static class ObservabilityStartup
 {
-	public static void ConfigureClientUI(IServiceCollection services, ConfigurationManager configManager, AppConfiguration config)
-	{
-		ConfigureLogging(configManager);
-		Tracing.EnableWebUITracing(services, config.Observability.Jaeger);
-
-		// Setup initial Tracing Source
-		Tracing.Source = new(Statics.TracingService);
-	}
-
 	public static void ConfigureApi(IServiceCollection services, ConfigurationManager configManager, AppConfiguration config)
 	{
 		ConfigureLogging(configManager);

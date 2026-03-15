@@ -52,7 +52,7 @@ public record PelotonWorkout
 	{
 		Id = workout.Id;
 		Status = workout.Status;
-		PelotonFitnessDiscipline = workout.Fitness_Discipline.ToString();
+		PelotonFitnessDiscipline = ToDisplayName(workout.Fitness_Discipline);
 		IsOutdoor = workout.Is_Outdoor;
 		WorkoutTitle = workout.Ride?.Title;
 		InstructorName = workout.Ride?.Instructor?.Name;
@@ -60,6 +60,15 @@ public record PelotonWorkout
 		CreatedAt = workout.Created_At;
 		ImageUrl = workout.Ride?.Image_Url;
 	}
+
+	private static string ToDisplayName(FitnessDiscipline discipline) => discipline switch
+	{
+		FitnessDiscipline.Bike_Bootcamp => "Cycling Bootcamp",
+		FitnessDiscipline.Caesar => "Rowing",
+		FitnessDiscipline.Caesar_Bootcamp => "Row Bootcamp",
+		FitnessDiscipline.Circuit => "Tread Bootcamp",
+		_ => discipline.ToString().Replace("_", " "),
+	};
 
 	public string? Id { get; init; }
 	public string? Status { get; init; }

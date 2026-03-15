@@ -37,7 +37,9 @@ public static class ApiStartupServices
 		services.AddSingleton<IGarminUploader, GarminUploader>();
 		services.AddSingleton<IGarminApiClient, Garmin.ApiClient>();
 		services.AddSingleton<IGarminAuthenticationService, GarminAuthenticationService>();
+		services.AddSingleton<IGarminActivityEnrichmentService, GarminActivityEnrichmentService>();
 		services.AddSingleton<IGarminDb, GarminDb>();
+		services.AddSingleton<IGarminMergeDb, GarminMergeDb>();
 
 		// IO
 		services.AddSingleton<IFileHandling, IOWrapper>();

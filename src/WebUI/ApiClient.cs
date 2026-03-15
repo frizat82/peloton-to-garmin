@@ -255,4 +255,58 @@ public class ApiClient : IApiClient
 			throw new ApiClientException(error?.Message, e);
 		}
 	}
+
+	public async Task<GarminMergeGetResponse> GarminMergeGetAsync()
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/garminmerge"
+				.GetJsonAsync<GarminMergeGetResponse>();
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
+
+	public async Task<GarminMergePreviewResponse> GarminMergePreviewAsync(GarminMergePreviewRequest request)
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/garminmerge/preview"
+				.WithTimeout(30)
+				.PostJsonAsync(request)
+				.ReceiveJson<GarminMergePreviewResponse>();
+		}
+		catch (FlurlHttpTimeoutException te)
+		{
+			throw new SyncTimeoutException(te.Message, te);
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
+
+	public async Task<GarminMergePostResponse> GarminMergePostAsync(GarminMergePostRequest request)
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/garminmerge"
+				.WithTimeout(30)
+				.PostJsonAsync(request)
+				.ReceiveJson<GarminMergePostResponse>();
+		}
+		catch (FlurlHttpTimeoutException te)
+		{
+			throw new SyncTimeoutException(te.Message, te);
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
 }

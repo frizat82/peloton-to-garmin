@@ -26,6 +26,10 @@ public interface IApiClient
 	Task<GarminAuthenticationGetResponse> GetGarminAuthenticationAsync();
 	Task<IFlurlResponse> SignInToGarminAsync();
 	Task SendGarminMfaTokenAsync(GarminAuthenticationMfaTokenPostRequest request);
+
+	Task<GarminMergeGetResponse> GarminMergeGetAsync();
+	Task<GarminMergePostResponse> GarminMergePostAsync(GarminMergePostRequest request);
+	Task<GarminMergePreviewResponse> GarminMergePreviewAsync(GarminMergePreviewRequest request);
 }
 
 public class ApiClientException : Exception

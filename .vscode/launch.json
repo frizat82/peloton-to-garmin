@@ -6,6 +6,37 @@
             "type": "blazorwasm",
             "request": "launch",
             "cwd": "${workspaceFolder}/src/WebUI"
+        },
+        {
+            "name": "Api",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-api",
+            "program": "${workspaceFolder}/src/Api/bin/Debug/net9.0/Api.dll",
+            "args": ["--no-launch-profile"],
+            "cwd": "${workspaceFolder}/src/Api",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "WebUI",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-webui",
+            "program": "${workspaceFolder}/src/WebUI/bin/Debug/net9.0/WebUI.dll",
+            "args": ["--no-launch-profile"],
+            "cwd": "${workspaceFolder}/src/WebUI",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Api + WebUI",
+            "configurations": ["Api", "WebUI"],
+            "stopAll": true
         }
     ]
 }

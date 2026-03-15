@@ -1,4 +1,5 @@
-﻿using Common.Http;
+﻿using Common.Dto;
+using Common.Http;
 using Common.Observe;
 using Common.Service;
 using Flurl.Http;
@@ -6,6 +7,8 @@ using Garmin.Auth;
 using Garmin.Dto;
 using OAuth;
 using Serilog;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,6 +25,8 @@ namespace Garmin
 		Task<OAuth2Token> GetOAuth2TokenAsync(OAuth1Token oAuth1Token, ConsumerCredentials credentials);
 		Task<ConsumerCredentials> GetConsumerCredentialsAsync();
 		Task<UploadResponse> UploadActivity(string filePath, string format, GarminApiAuthentication auth);
+		Task<ICollection<GarminActivitySummary>> SearchActivitiesAsync(DateTime startDate, DateTime endDate, GarminApiAuthentication auth);
+		Task UpdateActivityAsync(long activityId, GarminActivityUpdateRequest request, GarminApiAuthentication auth);
 	}
 
 	public class ApiClient : IGarminApiClient
@@ -131,16 +136,21 @@ namespace Garmin
 								.ReceiveJson<OAuth2Token>();
 		}
 
+		private static IFlurlRequest WithConnectApiHeaders(string url, GarminApiAuthentication auth, GarminApiSettings api)
+		{
+			return url
+				.WithOAuthBearerToken(auth.OAuth2Token.Access_Token)
+				.WithHeader("NK", api.UplaodActivityNkHeader)
+				.WithHeader("origin", api.Origin)
+				.WithHeader("User-Agent", api.UploadActivityUserAgent);
+		}
+
 		public async Task<UploadResponse> UploadActivity(string filePath, string format, GarminApiAuthentication auth)
 		{
 			var settings = await _settingsService.GetSettingsAsync();
 
 			var fileName = Path.GetFileName(filePath);
-			var response = await $"{settings.Garmin.Api.UploadActivityUrl}/{format}"
-				.WithOAuthBearerToken(auth.OAuth2Token.Access_Token)
-				.WithHeader("NK", settings.Garmin.Api.UplaodActivityNkHeader)
-				.WithHeader("origin", settings.Garmin.Api.Origin)
-				.WithHeader("User-Agent", settings.Garmin.Api.UploadActivityUserAgent)
+			var response = await WithConnectApiHeaders($"{settings.Garmin.Api.UploadActivityUrl}/{format}", auth, settings.Garmin.Api)
 				.AllowHttpStatus("2xx,409")
 				.PostMultipartAsync((data) =>
 				{
@@ -172,6 +182,29 @@ namespace Garmin
 			}
 
 			return response;
+		}
+
+		public async Task<ICollection<GarminActivitySummary>> SearchActivitiesAsync(DateTime startDate, DateTime endDate, GarminApiAuthentication auth)
+		{
+			var settings = await _settingsService.GetSettingsAsync();
+
+			return await WithConnectApiHeaders(settings.Garmin.Api.ActivitySearchUrl, auth, settings.Garmin.Api)
+				.SetQueryParams(new
+				{
+					startDate = startDate.ToString("yyyy-MM-dd"),
+					endDate = endDate.ToString("yyyy-MM-dd"),
+					start = 0,
+					limit = 50
+				})
+				.GetJsonAsync<ICollection<GarminActivitySummary>>();
+		}
+
+		public async Task UpdateActivityAsync(long activityId, GarminActivityUpdateRequest request, GarminApiAuthentication auth)
+		{
+			var settings = await _settingsService.GetSettingsAsync();
+
+			await WithConnectApiHeaders($"{settings.Garmin.Api.ActivityUpdateUrl}/{activityId}", auth, settings.Garmin.Api)
+				.PutJsonAsync(request);
 		}
 	}
 }

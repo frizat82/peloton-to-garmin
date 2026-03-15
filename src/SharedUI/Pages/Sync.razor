@@ -1,4 +1,4 @@
-﻿@page "/sync"
+@page "/sync"
 @using SharedUI.Shared;
 @inherits TracingComponentBase
 @inject IApiClient _apiClient;
@@ -19,7 +19,7 @@
 	<BodyTemplate>
 		<div class="row">
 			<div class="col-md-4">
-				<HxSwitch @bind-Value="forceStackWorkouts" Inline="true"> 
+				<HxSwitch @bind-Value="forceStackWorkouts" Inline="true">
 					<TextTemplate>
 						Stack Workouts
                         <HxPopover Trigger="PopoverTrigger.Hover|PopoverTrigger.Click|PopoverTrigger.Focus"
@@ -30,11 +30,17 @@
                         </HxPopover>
 					</TextTemplate>
 				</HxSwitch>
-				
+
 			</div>
 			<div class="col-md-4">
 			</div>
 			<div class="col-md-4 text-end">
+				@if (_garminEnrichEnabled)
+				{
+					<HxButton OnClick="PreviewMergeAsync" Color="ThemeColor.Secondary" Enabled="@selectedItems.Any()" CssClass="me-2">
+						Preview Merge
+					</HxButton>
+				}
 				<HxButton OnClick="SyncAsync" Color="ThemeColor.Primary" Enabled="@IsSyncButtonEnabled()">
 					Sync <span class="badge bg-secondary">@selectedItems.Count()</span>
 				</HxButton>
@@ -42,6 +48,69 @@
 		</div>
 	</BodyTemplate>
 </HxCard>
+
+@if (_previewLoading)
+{
+	<HxCard CssClass="mt-3">
+		<BodyTemplate><HxSpinner Color="ThemeColor.Primary" /> Loading preview...</BodyTemplate>
+	</HxCard>
+}
+else if (_previewItems != null)
+{
+	<HxCard CssClass="mt-3">
+		<HeaderTemplate>
+			<strong>Preview: Proposed Garmin Matches</strong>
+			<small class="text-muted ms-2">No changes will be made until you click Sync</small>
+			<HxButton Icon="BootstrapIcon.X" Color="ThemeColor.Light" Size="ButtonSize.Small" OnClick="@(() => _previewItems = null)" CssClass="ms-2 float-end" Tooltip="Dismiss" />
+		</HeaderTemplate>
+		<BodyTemplate>
+			<HxGrid TItem="GarminMergePreviewItem" DataProvider="PreviewDataProviderAsync" Responsive="true" PageSize="50">
+				<Columns>
+					<HxGridColumn TItem="GarminMergePreviewItem" HeaderText="Peloton Workout" ItemTextSelector="@(item => item.PelotonWorkoutTitle)" />
+					<HxGridColumn TItem="GarminMergePreviewItem" HeaderText="Garmin Match">
+						<ItemTemplate>
+							@if (context.HasMatch)
+							{
+								<HxBadge Color="ThemeColor.Success">Match Found</HxBadge>
+								<span class="ms-2 text-muted">
+									@(context.GarminActivityName ?? $"#{context.GarminActivityId}")
+									@if (context.GarminActivityStartTimeUtc.HasValue)
+									{
+										<span class="ms-1 text-secondary">(@context.GarminActivityStartTimeUtc.Value.ToLocalTime().ToString("MM/dd HH:mm"))</span>
+									}
+								</span>
+							}
+							else
+							{
+								<HxBadge Color="ThemeColor.Warning">No Match</HxBadge>
+								<span class="ms-2 text-muted">Will be uploaded as new activity</span>
+							}
+						</ItemTemplate>
+					</HxGridColumn>
+					<HxGridColumn TItem="GarminMergePreviewItem" HeaderText="Time Delta" ItemTextSelector="@(item => item.HasMatch ? $"{item.MatchDeltaSeconds:F0}s" : "—")" />
+				</Columns>
+			</HxGrid>
+		</BodyTemplate>
+	</HxCard>
+}
+
+@if (_lastSyncMergeResults != null && _lastSyncMergeResults.Any())
+{
+	<HxCard CssClass="mt-3">
+		<HeaderTemplate>
+			<strong>Sync Results: Merged Activities</strong>
+			<HxButton Icon="BootstrapIcon.X" Color="ThemeColor.Light" Size="ButtonSize.Small" OnClick="@(() => _lastSyncMergeResults = null)" CssClass="ms-2 float-end" Tooltip="Dismiss" />
+		</HeaderTemplate>
+		<BodyTemplate>
+			<HxGrid TItem="SyncMergeResultItem" DataProvider="SyncResultDataProviderAsync" Responsive="true" PageSize="50">
+				<Columns>
+					<HxGridColumn TItem="SyncMergeResultItem" HeaderText="Peloton Workout" ItemTextSelector="@(item => item.PelotonWorkoutTitle)" />
+					<HxGridColumn TItem="SyncMergeResultItem" HeaderText="Merged Into" ItemTextSelector="@(item => item.GarminActivityName != null ? $"{item.GarminActivityName} (#{item.GarminActivityId})" : $"#{item.GarminActivityId}")" />
+				</Columns>
+			</HxGrid>
+		</BodyTemplate>
+	</HxCard>
+}
 
 <HxGrid TItem="PelotonWorkout" MultiSelectionEnabled="true" Responsive="true" DataProvider="LoadDataAsync" @bind-SelectedDataItems="selectedItems" PageSize="PageSize" SelectionEnabled="false">
 	<Columns>
@@ -59,6 +128,10 @@
 	private static int PageSize = 25;
 	private bool PelotonSettingNotConfiguredYet = false;
 	private bool forceStackWorkouts = false;
+	private bool _garminEnrichEnabled = false;
+	private ICollection<GarminMergePreviewItem>? _previewItems;
+	private bool _previewLoading = false;
+	private ICollection<SyncMergeResultItem>? _lastSyncMergeResults;
 
 	private GarminMfaModal? _garminMfaModal;
 
@@ -73,9 +146,10 @@
 	protected override async Task OnInitializedAsync()
 	{
 		using var tracing = Tracing.ClientTrace($"{nameof(Sync)}.{nameof(OnInitializedAsync)}", kind: ActivityKind.Client);
-	
+
 		var settings = await _apiClient.SettingsGetAsync();
 		PelotonSettingNotConfiguredYet = !settings.Peloton.IsConfigured;
+		_garminEnrichEnabled = settings.Garmin?.EnrichGarminActivities ?? false;
 	}
 
 	private async Task<GridDataProviderResult<PelotonWorkout>> LoadDataAsync(GridDataProviderRequest<PelotonWorkout> request)
@@ -107,6 +181,61 @@
 		return new GridDataProviderResult<PelotonWorkout>() { Data = new List<PelotonWorkout>(), TotalCount = 0 };
 	}
 
+	private Task<GridDataProviderResult<GarminMergePreviewItem>> PreviewDataProviderAsync(GridDataProviderRequest<GarminMergePreviewItem> request)
+	{
+		return Task.FromResult(new GridDataProviderResult<GarminMergePreviewItem>
+		{
+			Data = _previewItems ?? Array.Empty<GarminMergePreviewItem>(),
+			TotalCount = _previewItems?.Count ?? 0,
+		});
+	}
+
+	private Task<GridDataProviderResult<SyncMergeResultItem>> SyncResultDataProviderAsync(GridDataProviderRequest<SyncMergeResultItem> request)
+	{
+		return Task.FromResult(new GridDataProviderResult<SyncMergeResultItem>
+		{
+			Data = _lastSyncMergeResults ?? Array.Empty<SyncMergeResultItem>(),
+			TotalCount = _lastSyncMergeResults?.Count ?? 0,
+		});
+	}
+
+	private async Task PreviewMergeAsync()
+	{
+		using var tracing = Tracing.ClientTrace($"{nameof(Sync)}.{nameof(PreviewMergeAsync)}", kind: ActivityKind.Client);
+		_toaster.Clear();
+		await _garminMfaModal!.ShowAsync(ContinuePreviewMergeAsync);
+	}
+
+	private async Task ContinuePreviewMergeAsync()
+	{
+		using var tracing = Tracing.ClientTrace($"{nameof(Sync)}.{nameof(ContinuePreviewMergeAsync)}", kind: ActivityKind.Client);
+
+		_previewLoading = true;
+		_previewItems = null;
+		try
+		{
+			var response = await _apiClient.GarminMergePreviewAsync(new GarminMergePreviewRequest
+			{
+				WorkoutIds = selectedItems.Select(i => i.Id!).ToList()
+			});
+			_previewItems = response.Items;
+		}
+		catch (ApiClientException e)
+		{
+			_toaster.AddError(e.Message);
+			Log.Error("UI - Failed to preview merge.", e);
+		}
+		catch (Exception e)
+		{
+			_toaster.AddError($"Preview failed - {e.Message} - See logs for details.");
+			Log.Error("UI - Failed to preview merge.", e);
+		}
+		finally
+		{
+			_previewLoading = false;
+		}
+	}
+
 	private async Task SyncAsync()
 	{
 		using var tracing = Tracing.ClientTrace($"{nameof(Sync)}.{nameof(SyncAsync)}", kind: ActivityKind.Client);
@@ -124,13 +253,16 @@
 		{
 			var result = await _apiClient.SyncPostAsync(new SyncPostRequest() { WorkoutIds = selectedItems.Select(i => i.Id!).ToList(), ForceStackWorkouts = forceStackWorkouts });
 			selectedItems.Clear();
+			_previewItems = null;
 
 			if (result.SyncSuccess)
 			{
+				_lastSyncMergeResults = result.MergeResults?.Any() == true ? result.MergeResults : null;
 				_toaster.AddInformation("Successfully synced selected workouts.");
 			}
 			else
 			{
+				_lastSyncMergeResults = null;
 				if (result.Errors is null || !result.Errors.Any())
 				{
 					_toaster.AddError("An unknown error occurred. Please check logs for more details.");

@@ -17,15 +17,6 @@
             <SharedUI.Shared.SystemInfo />
         </Content>
     </HxTab>
-    @if (Statics.AppType == Constants.ClientUIName)
-    {
-        <HxTab Id="tab1" Title="Logs">
-            <Content>
-                <br />
-                <SharedUI.Shared.ClientLogs />
-            </Content>
-        </HxTab>
-    }
     @if (Statics.AppType == Constants.WebUIName)
     {
         <HxTab Id="tab1" Title="WebUI Logs">

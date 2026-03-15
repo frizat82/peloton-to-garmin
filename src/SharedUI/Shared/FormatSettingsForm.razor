@@ -336,7 +336,7 @@
 
 	private Task<GridDataProviderResult<KeyValuePair<WorkoutType, GarminDeviceInfo>>> DeviceInfo_GetGridData(GridDataProviderRequest<KeyValuePair<WorkoutType, GarminDeviceInfo>> request)
 	{
-		var items = formatSettings.DeviceInfoSettings
+		var items = (formatSettings.DeviceInfoSettings ?? new Dictionary<WorkoutType, GarminDeviceInfo>())
 					.AsEnumerable()
 					.OrderBy(i => i.Key);
 

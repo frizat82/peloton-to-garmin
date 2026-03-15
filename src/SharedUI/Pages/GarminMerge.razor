@@ -1,0 +1,175 @@
+@page "/garminmerge"
+@using SharedUI.Shared
+@inherits TracingComponentBase
+@inject IApiClient _apiClient
+@inject IHxMessengerService _toaster
+
+<PageTitle>Activity Merge</PageTitle>
+
+<GarminMfaModal @ref="_garminMfaModal" />
+
+<HxCard CssClass="mb-3">
+    <HeaderTemplate>
+        <strong>Activity Merge</strong>
+        <small class="text-muted ms-2">Match Peloton workouts to existing Garmin device activities and enrich them with Peloton-only stats</small>
+    </HeaderTemplate>
+    <BodyTemplate>
+        <p>
+            When <b>Merge with Garmin device activities</b> is enabled in Settings, P2G automatically matches Peloton workouts to Garmin device-recorded activities and enriches them with Peloton stats (power, cadence, resistance, speed, class title). The matched workout file is skipped — no duplicate is uploaded.
+        </p>
+        <p>
+            Use the table below to see past merges, or trigger a manual merge for a workout the auto-sync missed.
+        </p>
+    </BodyTemplate>
+</HxCard>
+
+<HxCard CssClass="mb-3">
+    <HeaderTemplate>Manual Merge</HeaderTemplate>
+    <BodyTemplate>
+        <div class="row g-3 align-items-end">
+            <div class="col-md-6">
+                <HxInputText Label="Peloton Workout ID" @bind-Value="_manualWorkoutId" Placeholder="e.g. a1b2c3d4e5f6..." />
+            </div>
+            <div class="col-md-3">
+                <HxButton OnClick="ManualMergeAsync" Color="ThemeColor.Primary" Enabled="@(!string.IsNullOrWhiteSpace(_manualWorkoutId))">
+                    Merge
+                </HxButton>
+            </div>
+        </div>
+        <HxAlert Color="ThemeColor.Info" CssClass="mt-2">
+            <HxIcon Icon="@BootstrapIcon.InfoCircle" /> You can find Peloton workout IDs on the <a href="sync">Sync</a> page by selecting a workout and noting its ID in the URL, or from the Peloton app/website.
+        </HxAlert>
+    </BodyTemplate>
+</HxCard>
+
+<HxCard>
+    <HeaderTemplate>
+        Merge History
+        <HxButton Icon="BootstrapIcon.ArrowClockwise" Color="ThemeColor.Light" Size="ButtonSize.Small" OnClick="LoadMergeHistoryAsync" CssClass="ms-2" Tooltip="Refresh" />
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (_loading)
+        {
+            <HxSpinner Color="ThemeColor.Primary" />
+        }
+        else if (_records == null || !_records.Any())
+        {
+            <p class="text-muted">No merge records yet. Enable <b>Merge with Garmin device activities</b> in Settings and run a sync.</p>
+        }
+        else
+        {
+            <HxGrid TItem="GarminMergeRecordDto" DataProvider="MergeRecordsDataProviderAsync" Responsive="true" PageSize="50">
+                <Columns>
+                    <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Merged At" ItemTextSelector="@(item => item.MergedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))" SortKeySelector="@(item => item.MergedAt)" IsDefaultSortColumn="true" SortDescending="true" />
+                    <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Peloton Workout" ItemTextSelector="@(item => item.PelotonWorkoutTitle)" />
+                    <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Garmin Activity ID" ItemTextSelector="@(item => item.GarminActivityId.ToString())" />
+                    <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Source">
+                        <ItemTemplate>
+                            @if (context.Source == MergeSourceDto.Auto)
+                            {
+                                <HxBadge Color="ThemeColor.Success">Auto</HxBadge>
+                            }
+                            else
+                            {
+                                <HxBadge Color="ThemeColor.Primary">Manual</HxBadge>
+                            }
+                        </ItemTemplate>
+                    </HxGridColumn>
+                </Columns>
+            </HxGrid>
+        }
+    </BodyTemplate>
+</HxCard>
+
+@code {
+    private ICollection<GarminMergeRecordDto>? _records;
+    private string _manualWorkoutId = string.Empty;
+    private bool _loading = false;
+
+    private GarminMfaModal? _garminMfaModal;
+
+    public GarminMerge() : base(nameof(GarminMerge)) { }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var tracing = Tracing.ClientTrace($"{nameof(GarminMerge)}.{nameof(OnInitializedAsync)}", kind: ActivityKind.Client);
+        await LoadMergeHistoryAsync();
+    }
+
+    private Task<GridDataProviderResult<GarminMergeRecordDto>> MergeRecordsDataProviderAsync(GridDataProviderRequest<GarminMergeRecordDto> request)
+    {
+        return Task.FromResult(new GridDataProviderResult<GarminMergeRecordDto>
+        {
+            Data = _records ?? Array.Empty<GarminMergeRecordDto>(),
+            TotalCount = _records?.Count ?? 0,
+        });
+    }
+
+    private async Task LoadMergeHistoryAsync()
+    {
+        using var tracing = Tracing.ClientTrace($"{nameof(GarminMerge)}.{nameof(LoadMergeHistoryAsync)}", kind: ActivityKind.Client);
+        _loading = true;
+        try
+        {
+            var response = await _apiClient.GarminMergeGetAsync();
+            _records = response.Records;
+        }
+        catch (ApiClientException e)
+        {
+            _toaster.AddError(e.Message);
+            Log.Error("UI - Failed to load merge history.", e);
+        }
+        catch (Exception e)
+        {
+            _toaster.AddError($"Failed to load merge history - {e.Message}");
+            Log.Error("UI - Failed to load merge history.", e);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ManualMergeAsync()
+    {
+        using var tracing = Tracing.ClientTrace($"{nameof(GarminMerge)}.{nameof(ManualMergeAsync)}", kind: ActivityKind.Client);
+        _toaster.Clear();
+        await _garminMfaModal!.ShowAsync(ContinueManualMergeAsync);
+    }
+
+    private async Task ContinueManualMergeAsync()
+    {
+        using var tracing = Tracing.ClientTrace($"{nameof(GarminMerge)}.{nameof(ContinueManualMergeAsync)}", kind: ActivityKind.Client);
+
+        try
+        {
+            var result = await _apiClient.GarminMergePostAsync(new GarminMergePostRequest { WorkoutId = _manualWorkoutId });
+            _manualWorkoutId = string.Empty;
+
+            if (result.Success)
+            {
+                _toaster.AddInformation(result.Message);
+                await LoadMergeHistoryAsync();
+            }
+            else
+            {
+                _toaster.AddError(result.Message);
+            }
+        }
+        catch (SyncTimeoutException te)
+        {
+            _toaster.AddInformation("Long running merge will continue in the background.");
+            Log.Information("UI - Merge timeout reached.", te);
+        }
+        catch (ApiClientException e)
+        {
+            _toaster.AddError(e.Message);
+            Log.Error("UI - Failed to merge activity.", e);
+        }
+        catch (Exception e)
+        {
+            _toaster.AddError($"Failed to merge - {e.Message} - See logs for details.");
+            Log.Error("UI - Failed to merge activity.", e);
+        }
+    }
+}

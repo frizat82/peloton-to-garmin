@@ -6,6 +6,7 @@ using Conversion;
 using Core.GitHub;
 using FluentAssertions;
 using Garmin;
+using Garmin.Dto;
 using Moq;
 using Moq.AutoMock;
 using NUnit.Framework;
@@ -304,6 +305,77 @@ namespace UnitTests.Sync
 
 			// ASSERT
 			ghService.Verify(x => x.GetLatestReleaseInformationAsync("philosowaffle", "peloton-to-garmin", Constants.AppVersion), Times.Never);
+		}
+
+		[Test]
+		public async Task SyncAsync_When_EnrichmentReturnsMatchedIds_Should_PopulateEnrichedWorkoutIds()
+		{
+			// SETUP
+			var mocker = new AutoMocker();
+			var service = mocker.CreateInstance<SyncService>();
+			var peloton = mocker.GetMock<IPelotonService>();
+			var db = mocker.GetMock<ISyncStatusDb>();
+			var converter = mocker.GetMock<IConverter>();
+			var enrichmentService = mocker.GetMock<IGarminActivityEnrichmentService>();
+			var settingsService = mocker.GetMock<ISettingsService>();
+
+			var settings = new Settings();
+			settings.Format.Fit = true;
+			settings.App.CheckForUpdates = false;
+			settingsService.Setup(s => s.GetSettingsAsync()).ReturnsAsync(settings);
+
+			converter.Setup(c => c.ConvertAsync(It.IsAny<P2GWorkout>())).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Success });
+
+			var syncStatus = new SyncServiceStatus();
+			db.Setup(x => x.GetSyncStatusAsync()).Returns(Task.FromResult(syncStatus));
+			peloton.Setup(x => x.GetRecentWorkoutsAsync(0)).ReturnsAsync(new List<Workout>() { new Workout() { Status = "COMPLETE", Id = "1" } }.AsServiceResult());
+			peloton.Setup(x => x.GetWorkoutDetailsAsync(It.IsAny<ICollection<Workout>>())).ReturnsAsync(new P2GWorkout[] { new P2GWorkout() });
+			enrichmentService.Setup(e => e.EnrichAsync(It.IsAny<IEnumerable<P2GWorkout>>()))
+				.ReturnsAsync(new List<GarminEnrichmentResult> { new GarminEnrichmentResult { PelotonWorkoutId = "workout1", HasMatch = true } });
+
+			// ACT
+			var response = await service.SyncAsync(0);
+
+			// ASSERT
+			response.SyncSuccess.Should().BeTrue();
+			response.MergeResults.Should().ContainSingle().Which.PelotonWorkoutId.Should().Be("workout1");
+			enrichmentService.Verify(e => e.EnrichAsync(It.IsAny<IEnumerable<P2GWorkout>>()), Times.Once);
+		}
+
+		[Test]
+		public async Task SyncAsync_When_EnrichmentThrows_Should_FallbackToNormalUpload()
+		{
+			// SETUP
+			var mocker = new AutoMocker();
+			var service = mocker.CreateInstance<SyncService>();
+			var peloton = mocker.GetMock<IPelotonService>();
+			var db = mocker.GetMock<ISyncStatusDb>();
+			var converter = mocker.GetMock<IConverter>();
+			var garmin = mocker.GetMock<IGarminUploader>();
+			var enrichmentService = mocker.GetMock<IGarminActivityEnrichmentService>();
+			var settingsService = mocker.GetMock<ISettingsService>();
+
+			var settings = new Settings();
+			settings.Format.Fit = true;
+			settings.App.CheckForUpdates = false;
+			settingsService.Setup(s => s.GetSettingsAsync()).ReturnsAsync(settings);
+
+			converter.Setup(c => c.ConvertAsync(It.IsAny<P2GWorkout>())).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Success });
+
+			var syncStatus = new SyncServiceStatus();
+			db.Setup(x => x.GetSyncStatusAsync()).Returns(Task.FromResult(syncStatus));
+			peloton.Setup(x => x.GetRecentWorkoutsAsync(0)).ReturnsAsync(new List<Workout>() { new Workout() { Status = "COMPLETE", Id = "1" } }.AsServiceResult());
+			peloton.Setup(x => x.GetWorkoutDetailsAsync(It.IsAny<ICollection<Workout>>())).ReturnsAsync(new P2GWorkout[] { new P2GWorkout() });
+			enrichmentService.Setup(e => e.EnrichAsync(It.IsAny<IEnumerable<P2GWorkout>>()))
+				.ThrowsAsync(new Exception("Garmin API unavailable"));
+
+			// ACT
+			var response = await service.SyncAsync(0);
+
+			// ASSERT
+			response.SyncSuccess.Should().BeTrue();
+			response.UploadToGarminSuccess.Should().BeTrue();
+			garmin.Verify(x => x.UploadToGarminAsync(), Times.Once);
 		}
 
 		[Test]

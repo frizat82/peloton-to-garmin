@@ -18,10 +18,6 @@
             <HxListGroupItem><HxIcon Icon="BootstrapIcon.Microsoft" /> <b>Runtime Version:</b> @systemInfo.RunTimeVersion</HxListGroupItem>
             <HxListGroupItem><HxIcon Icon="BootstrapIcon.Folder2Open" /> <b>Output Directory:</b> @systemInfo.OutputDirectory</HxListGroupItem>
             <HxListGroupItem><HxIcon Icon="BootstrapIcon.Folder" /> <b>Temp Directory:</b> @systemInfo.TempDirectory</HxListGroupItem>
-            @if (Statics.AppType == Constants.ClientUIName)
-            {
-                <HxListGroupItem><HxIcon Icon="BootstrapIcon.GearWideConnected" /> <b>Application Configuration Path:</b> @systemInfo.ApplicationConfigFilePath</HxListGroupItem>
-            }
             @if (Statics.AppType == Constants.WebUIName)
             {
                 <HxListGroupItem><HxIcon Icon="BootstrapIcon.GearWideConnected" /> <b>Api Application Configuration Path:</b> @systemInfo.ApplicationConfigFilePath</HxListGroupItem>

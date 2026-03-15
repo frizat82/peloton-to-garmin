@@ -1,4 +1,4 @@
-﻿using Common;
+using Common;
 using Common.Dto;
 using Common.Dto.Peloton;
 using Common.Observe;
@@ -7,6 +7,7 @@ using Common.Stateful;
 using Conversion;
 using Garmin;
 using Garmin.Auth;
+using Garmin.Dto;
 using Peloton;
 using Prometheus;
 using Serilog;
@@ -14,6 +15,7 @@ using Sync.Database;
 using Sync.Dto;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -23,6 +25,7 @@ namespace Sync
 	{
 		Task<SyncResult> SyncAsync(int numWorkouts, bool forceStackClasses);
 		Task<SyncResult> SyncAsync(IEnumerable<string> workoutIds, ICollection<WorkoutType>? exclude = null, bool forceStackWorkouts = false);
+		Task<ICollection<GarminEnrichmentResult>> PreviewMergeAsync(IEnumerable<string> workoutIds);
 	}
 
 	public class SyncService : ISyncService
@@ -32,16 +35,18 @@ namespace Sync
 
 		private readonly IPelotonService _pelotonService;
 		private readonly IGarminUploader _garminUploader;
+		private readonly IGarminActivityEnrichmentService _enrichmentService;
 		private readonly IEnumerable<IConverter> _converters;
 		private readonly ISyncStatusDb _db;
 		private readonly IFileHandling _fileHandler;
 		private readonly ISettingsService _settingsService;
 
-		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, IFileHandling fileHandler)
+		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IGarminActivityEnrichmentService enrichmentService, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, IFileHandling fileHandler)
 		{
 			_settingsService = settingService;
 			_pelotonService = pelotonService;
 			_garminUploader = garminUploader;
+			_enrichmentService = enrichmentService;
 			_converters = converters;
 			_db = dbClient;
 			_fileHandler = fileHandler;
@@ -51,7 +56,7 @@ namespace Sync
 		{
 			using var timer = SyncHistogram.NewTimer();
 			using var activity = Tracing.Trace($"{nameof(SyncService)}.{nameof(SyncAsync)}.ByNumWorkouts")
-										.WithTag("numWorkouts", numWorkouts.ToString());
+									.WithTag("numWorkouts", numWorkouts.ToString());
 
 			var settings = await _settingsService.GetSettingsAsync();
 			return await SyncWithWorkoutLoaderAsync(() => _pelotonService.GetRecentWorkoutsAsync(numWorkouts), settings.Peloton.ExcludeWorkoutTypes, forceStackClasses);
@@ -91,7 +96,8 @@ namespace Sync
 				return response;
 			}
 
-			var filteredWorkouts = workouts.Where(w => 
+			// Materialize immediately to avoid repeated enumeration of the LINQ chain
+			var filteredWorkouts = workouts.Where(w =>
 								{
 									if (w is null) return false;
 
@@ -104,13 +110,13 @@ namespace Sync
 									}
 
 									return true;
-								});
+								}).ToList();
 
-			var filteredWorkoutsCount = filteredWorkouts.Count();
+			var filteredWorkoutsCount = filteredWorkouts.Count;
 			activity?.AddTag("workouts.filtered", filteredWorkoutsCount);
 			_logger.Information("Found {@NumWorkouts} workouts remaining after filtering ExcludedWorkoutTypes.", filteredWorkoutsCount);
 
-			if (!filteredWorkouts.Any())
+			if (filteredWorkoutsCount == 0)
 			{
 				_logger.Information("No workouts to sync. Sync complete.");
 				response.ConversionSuccess = true;
@@ -119,14 +125,18 @@ namespace Sync
 			}
 
 			// calculate stacked workouts
-			var stackedWorkouts = filteredWorkouts;
+			List<P2GWorkout> stackedWorkouts;
 			if (settings.Format.StackedWorkouts.AutomaticallyStackWorkouts || forceStackClasses)
 			{
 				_logger.Debug("Stacking classes.");
 				var stackedClassesMaxAllowedGapSeconds = forceStackClasses ? long.MaxValue : settings.Format.StackedWorkouts.MaxAllowedGapSeconds;
 				var stacks = StackedWorkoutsCalculator.GetStackedWorkouts(filteredWorkouts, stackedClassesMaxAllowedGapSeconds);
-				stackedWorkouts = StackedWorkoutsCalculator.CombineStackedWorkouts(stacks);
+				stackedWorkouts = StackedWorkoutsCalculator.CombineStackedWorkouts(stacks).ToList();
 				_logger.Debug($"{filteredWorkoutsCount} workouts yielded {stacks.Count()} stacks.");
+			}
+			else
+			{
+				stackedWorkouts = filteredWorkouts;
 			}
 
 			var convertStatuses = new List<ConvertStatus>();
@@ -176,6 +186,37 @@ namespace Sync
 					response.Errors.Add(new ServiceError() { Message = convertStatus.ErrorMessage });
 
 			response.ConversionSuccess = true;
+
+			// Attempt to enrich existing Garmin device activities before uploading.
+			// Matched workouts have their upload files removed so they won't be re-uploaded.
+			try
+			{
+				var mergeResults = await _enrichmentService.EnrichAsync(stackedWorkouts);
+				response.MergeResults = mergeResults;
+
+				if (mergeResults.Any() && _fileHandler.DirExists(settings.App.UploadDirectory))
+				{
+					// Stacked workout IDs are comma-joined (e.g. "abc,def"); flatten to individual constituent
+					// IDs so each file can be matched by checking whether any part is a prefix of the filename.
+					var mergedIdParts = new HashSet<string>(
+						mergeResults.SelectMany(r => r.PelotonWorkoutId.Split(',')),
+						StringComparer.OrdinalIgnoreCase);
+
+					foreach (var file in Directory.GetFiles(settings.App.UploadDirectory))
+					{
+						var fileName = Path.GetFileName(file);
+						if (mergedIdParts.Any(part => fileName.StartsWith(part, StringComparison.OrdinalIgnoreCase)))
+						{
+							_logger.Debug("Skipping upload for merged workout file: {File}", fileName);
+							File.Delete(file);
+						}
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				_logger.Warning(e, "Failed to enrich Garmin activities. Proceeding with normal upload. {Message}", e.Message);
+			}
 
 			try
 			{
@@ -227,6 +268,26 @@ namespace Sync
 
 			response.SyncSuccess = true;
 			return response;
+		}
+
+		public async Task<ICollection<GarminEnrichmentResult>> PreviewMergeAsync(IEnumerable<string> workoutIds)
+		{
+			using var tracing = Tracing.Trace($"{nameof(SyncService)}.{nameof(PreviewMergeAsync)}");
+
+			var recentWorkouts = workoutIds.Select(w => new Workout() { Id = w }).ToList();
+
+			P2GWorkout[] workouts;
+			try
+			{
+				workouts = await _pelotonService.GetWorkoutDetailsAsync(recentWorkouts);
+			}
+			catch (Exception e)
+			{
+				_logger.Error(e, "Failed to download workouts from Peloton for merge preview.");
+				return new List<GarminEnrichmentResult>();
+			}
+
+			return await _enrichmentService.PreviewAsync(workouts);
 		}
 
 		private IEnumerable<string> FilterToCompletedWorkoutIds(ICollection<Workout> workouts)

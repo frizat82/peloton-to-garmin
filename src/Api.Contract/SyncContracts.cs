@@ -53,11 +53,20 @@ public record SyncPostRequest
 	public bool ForceStackWorkouts { get; init; } = false;
 }
 
+public record SyncMergeResultItem
+{
+	public string? PelotonWorkoutId { get; init; }
+	public string? PelotonWorkoutTitle { get; init; }
+	public long GarminActivityId { get; init; }
+	public string? GarminActivityName { get; init; }
+}
+
 public record SyncPostResponse
 {
 	public SyncPostResponse()
 	{
 		Errors = new List<ErrorResponse>();
+		MergeResults = new List<SyncMergeResultItem>();
 	}
 
 	public bool SyncSuccess { get; init; }
@@ -65,6 +74,7 @@ public record SyncPostResponse
 	public bool? ConverToFitSuccess { get; init; }
 	public bool? UploadToGarminSuccess { get; init; }
 	public ICollection<ErrorResponse> Errors { get; init; }
+	public ICollection<SyncMergeResultItem> MergeResults { get; init; }
 }
 
 public record SyncRecentPostRequest

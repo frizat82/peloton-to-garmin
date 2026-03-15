@@ -174,6 +174,8 @@ public class GarminSettings : ICredentials
 	public bool TwoStepVerificationEnabled { get; set; }
 	public bool Upload { get; set; }
 	public FileFormat FormatToUpload { get; set; }
+	public bool EnrichGarminActivities { get; set; } = false;
+	public int ActivityMatchWindowSeconds { get; set; } = 900;
 	public GarminApiSettings Api {  get; set; } = new GarminApiSettings();
 }
 
@@ -196,7 +198,8 @@ public class GarminApiSettings
 	public string Origin { get; set; } = "https://sso.garmin.com";
 	public string Referer { get; set; } = "https://sso.garmin.com/sso/signin";
 
-
+	public string ActivitySearchUrl { get; set; } = "https://connectapi.garmin.com/activitylist-service/activities/search/activities";
+	public string ActivityUpdateUrl { get; set; } = "https://connectapi.garmin.com/activity-service/activity";
 }
 
 public enum FileFormat : byte

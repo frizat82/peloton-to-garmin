@@ -12,6 +12,30 @@
 	<HxFormState Enabled="@garminSettings.Upload">
 		<div class="row g-3">
 			<div class="col-md-12">
+				<HxSwitch Text="Merge with Garmin device activities" @bind-Value="garminSettings.EnrichGarminActivities" Inline="true">
+					<TextTemplate>
+						Merge with Garmin device activities
+						<HxPopover Trigger="PopoverTrigger.Hover|PopoverTrigger.Click|PopoverTrigger.Focus"
+								   Title="<b>Merge with Garmin Device Activities</b>"
+								   Content="@EnrichDocumentation"
+								   Html="true">
+							<HxIcon Icon="@BootstrapIcon.QuestionCircle" />
+						</HxPopover>
+					</TextTemplate>
+				</HxSwitch>
+			</div>
+		</div>
+		@if (garminSettings.EnrichGarminActivities)
+		{
+			<div class="row g-3 mt-1">
+				<div class="col-md-4">
+					<HxInputNumber Label="Match Window (seconds)" @bind-Value="garminSettings.ActivityMatchWindowSeconds" />
+				</div>
+			</div>
+		}
+		<br />
+		<div class="row g-3">
+			<div class="col-md-12">
 				<HxCard>
 					<HeaderTemplate>Auth</HeaderTemplate>
 					<BodyTemplate>
@@ -238,4 +262,5 @@
 
 	private string UploadFormatDocumentation => $"Garmin supports uploading either FIT files or TCX files.  FIT is the more modern format and in most cases will result in the most data and features syncing to Garmin.<br /><br />  You must upload the FIT format in order to get extra fields calculated by Garmin such as TSS/VO2/TE.<br /><br /><a href='{configDocumentation}'>Documentation</a><br /><br /><small>(click the <b>?</b> to pin this window)</small>";
 	private string GarminApiDocumentation => $"These settings control how P2G communicates with the Garmin Api. <br /><br /><b>Please do not change these value unless you've been given explicit guidance to do so.</b><br /><br /><a href='{configDocumentation}'>Documentation</a><br /><br /><small>(click the <b>?</b> to pin this window)</small>";
+	private string EnrichDocumentation => "When enabled, P2G will search for an existing Garmin device-recorded activity that overlaps your Peloton workout's start time. If a match is found, P2G enriches it with Peloton-only stats (power, cadence, resistance, speed, class title) and skips uploading a duplicate FIT file. If no match is found, P2G uploads normally.<br /><br /><b>Match Window</b> controls how many seconds of difference is allowed between the Peloton and Garmin start times (default: 900s = 15 min).<br /><br />View the merge history on the <b>Activity Merge</b> page.";
 }

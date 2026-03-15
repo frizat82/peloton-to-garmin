@@ -35,6 +35,8 @@ public class SettingsGetResponse
 			FormatToUpload = settings.Garmin.FormatToUpload,
 			Upload = settings.Garmin.Upload,
 			IsPasswordSet = !string.IsNullOrEmpty(settings.Garmin.Password),
+			EnrichGarminActivities = settings.Garmin.EnrichGarminActivities,
+			ActivityMatchWindowSeconds = settings.Garmin.ActivityMatchWindowSeconds,
 			Api = settings.Garmin.Api ?? new GarminApiSettings()
 		};
 	}
@@ -53,6 +55,8 @@ public class SettingsGarminGetResponse
 	public bool TwoStepVerificationEnabled { get; set; }
 	public bool Upload { get; set; }
 	public FileFormat FormatToUpload { get; set; }
+	public bool EnrichGarminActivities { get; set; }
+	public int ActivityMatchWindowSeconds { get; set; } = 900;
 	public GarminApiSettings Api { get; set; } = new GarminApiSettings();
 }
 
@@ -63,6 +67,8 @@ public class SettingsGarminPostRequest
 	public bool TwoStepVerificationEnabled { get; set; }
 	public bool Upload { get; set; }
 	public FileFormat FormatToUpload { get; set; }
+	public bool EnrichGarminActivities { get; set; }
+	public int ActivityMatchWindowSeconds { get; set; } = 900;
 	public GarminApiSettings Api { get; set; } = new GarminApiSettings();
 }
 
@@ -122,6 +128,8 @@ public static class Mapping
 			TwoStepVerificationEnabled = response.TwoStepVerificationEnabled,
 			FormatToUpload = response.FormatToUpload,
 			Upload = response.Upload,
+			EnrichGarminActivities = response.EnrichGarminActivities,
+			ActivityMatchWindowSeconds = response.ActivityMatchWindowSeconds,
 			Api = response.Api,
 		};
 	}
@@ -135,6 +143,8 @@ public static class Mapping
 			TwoStepVerificationEnabled = request.TwoStepVerificationEnabled,
 			FormatToUpload = request.FormatToUpload,
 			Upload = request.Upload,
+			EnrichGarminActivities = request.EnrichGarminActivities,
+			ActivityMatchWindowSeconds = request.ActivityMatchWindowSeconds,
 			Api = request.Api,
 		};
 	}
