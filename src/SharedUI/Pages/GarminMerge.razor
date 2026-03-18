@@ -52,15 +52,11 @@
         {
             <HxSpinner Color="ThemeColor.Primary" />
         }
-        else if (_records == null || !_records.Any())
-        {
-            <p class="text-muted">No merge records yet. Enable <b>Merge with Garmin device activities</b> in Settings and run a sync.</p>
-        }
         else
         {
             <HxGrid TItem="GarminMergeRecordDto" DataProvider="MergeRecordsDataProviderAsync" Responsive="true" PageSize="50">
                 <Columns>
-                    <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Merged At" ItemTextSelector="@(item => item.MergedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))" SortKeySelector="@(item => item.MergedAt)" IsDefaultSortColumn="true" SortDescending="true" />
+                    <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Merged At" ItemTextSelector="@(item => item.MergedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))" />
                     <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Peloton Workout" ItemTextSelector="@(item => item.PelotonWorkoutTitle)" />
                     <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Garmin Activity ID" ItemTextSelector="@(item => item.GarminActivityId.ToString())" />
                     <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Source">
@@ -76,6 +72,9 @@
                         </ItemTemplate>
                     </HxGridColumn>
                 </Columns>
+                <EmptyDataTemplate>
+                    <p class="text-muted">No merge records yet. Enable <b>Merge with Garmin device activities</b> in Settings and run a sync.</p>
+                </EmptyDataTemplate>
             </HxGrid>
         }
     </BodyTemplate>
