@@ -203,8 +203,14 @@ namespace Garmin
 		{
 			var settings = await _settingsService.GetSettingsAsync();
 
-			await WithConnectApiHeaders($"{settings.Garmin.Api.ActivityUpdateUrl}/{activityId}", auth, settings.Garmin.Api)
+			var requestJson = System.Text.Json.JsonSerializer.Serialize(request);
+			_logger.Information("UpdateActivity PUT body: {Body}", requestJson);
+
+			var response = await WithConnectApiHeaders($"{settings.Garmin.Api.ActivityUpdateUrl}/{activityId}", auth, settings.Garmin.Api)
 				.PutJsonAsync(request);
+
+			var responseBody = await response.GetStringAsync();
+			_logger.Information("UpdateActivity response {Status}: {Body}", response.StatusCode, responseBody);
 		}
 	}
 }

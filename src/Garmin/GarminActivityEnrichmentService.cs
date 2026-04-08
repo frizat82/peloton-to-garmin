@@ -242,6 +242,9 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				: BuildCombinedDescription(group.Select(g => g.P2GWorkout)),
 		};
 
+		// Aggregate numeric fields across all workouts in group
+		PopulateStructuredFields(updateRequest, group.Select(g => g.P2GWorkout));
+
 		await _apiClient.UpdateActivityAsync(garminActivityId, updateRequest, auth);
 
 		_logger.Information("Successfully enriched Garmin activity {GarminActivityId}.", garminActivityId);
@@ -410,6 +413,91 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		var distanceSummary = workoutSamples?.Summaries?.FirstOrDefault(s => s.Slug == "distance");
 		if (distanceSummary?.Value is not null)
 			sb.AppendLine($"Distance: {distanceSummary.Value:F1} {distanceSummary.Display_Unit}");
+	}
+
+	private static void PopulateStructuredFields(GarminActivityUpdateRequest request, IEnumerable<P2GWorkout> workoutList)
+	{
+		// Only push fields the Garmin watch cannot measure itself.
+		// HR and calories stay with Garmin (watch sensor is more accurate).
+		// Distance stays with Garmin for tread/outdoor (GPS/accelerometer).
+		// For indoor cycling Garmin has no distance source, so we push it there.
+
+		double totalWork = 0;
+		double? avgPower = null, maxPower = null;
+		double? avgBikeCadence = null, maxBikeCadence = null;
+		double? avgRunCadence = null, maxRunCadence = null;
+		double? avgSpeed = null, maxSpeed = null;
+		double indoorCyclingDistanceMeters = 0;
+		int workoutCount = 0;
+
+		foreach (var w in workoutList)
+		{
+			workoutCount++;
+			var discipline = w.Workout.Fitness_Discipline;
+			var isCycling = discipline is FitnessDiscipline.Cycling or FitnessDiscipline.Bike_Bootcamp;
+			var isRunning = discipline is FitnessDiscipline.Running or FitnessDiscipline.Circuit; // Circuit = Tread Bootcamp
+
+			// Total work (kJ) — accumulate across workouts
+			if (w.Workout.Total_Work > 0)
+				totalWork += w.Workout.Total_Work / 1000.0;
+
+			// Power (cycling only)
+			var outputMetric = GetMetric("output", w.WorkoutSamples);
+			if (outputMetric?.Average_Value is not null)
+				avgPower = avgPower is null ? outputMetric.Average_Value : (avgPower * (workoutCount - 1) + outputMetric.Average_Value) / workoutCount;
+			if (outputMetric?.Max_Value is not null && (maxPower is null || outputMetric.Max_Value > maxPower))
+				maxPower = outputMetric.Max_Value;
+
+			// Cadence — bike vs run
+			var cadenceMetric = GetMetric("cadence", w.WorkoutSamples);
+			if (cadenceMetric?.Average_Value is not null)
+			{
+				if (isCycling)
+					avgBikeCadence = avgBikeCadence is null ? cadenceMetric.Average_Value : (avgBikeCadence * (workoutCount - 1) + cadenceMetric.Average_Value) / workoutCount;
+				else if (isRunning)
+					avgRunCadence = avgRunCadence is null ? cadenceMetric.Average_Value : (avgRunCadence * (workoutCount - 1) + cadenceMetric.Average_Value) / workoutCount;
+			}
+			if (cadenceMetric?.Max_Value is not null)
+			{
+				if (isCycling && (maxBikeCadence is null || cadenceMetric.Max_Value > maxBikeCadence)) maxBikeCadence = cadenceMetric.Max_Value;
+				if (isRunning && (maxRunCadence is null || cadenceMetric.Max_Value > maxRunCadence)) maxRunCadence = cadenceMetric.Max_Value;
+			}
+
+			// Speed — convert kph to m/s
+			var speedMetric = GetMetric("speed", w.WorkoutSamples) ?? GetMetric("split_pace", w.WorkoutSamples);
+			if (speedMetric?.Average_Value is not null)
+			{
+				var avgMs = speedMetric.Average_Value.Value / 3.6;
+				avgSpeed = avgSpeed is null ? avgMs : (avgSpeed * (workoutCount - 1) + avgMs) / workoutCount;
+			}
+			if (speedMetric?.Max_Value is not null)
+			{
+				var maxMs = speedMetric.Max_Value.Value / 3.6;
+				if (maxSpeed is null || maxMs > maxSpeed) maxSpeed = maxMs;
+			}
+
+			// Distance — only for indoor cycling (Garmin watch has no source for this)
+			if (isCycling)
+			{
+				var distSummary = w.WorkoutSamples?.Summaries?.FirstOrDefault(s => s.Slug == "distance");
+				if (distSummary?.Value is not null)
+				{
+					var unit = distSummary.Display_Unit?.ToLower() ?? "";
+					indoorCyclingDistanceMeters += unit.Contains("mile") ? distSummary.Value.Value * 1609.344 : distSummary.Value.Value * 1000;
+				}
+			}
+		}
+
+		if (totalWork > 0) request.TotalWork = Math.Round(totalWork, 1);
+		if (avgPower is not null) request.AvgPower = Math.Round(avgPower.Value, 1);
+		if (maxPower is not null) request.MaxPower = Math.Round(maxPower.Value, 1);
+		if (avgBikeCadence is not null) request.AvgBikeCadence = Math.Round(avgBikeCadence.Value, 1);
+		if (maxBikeCadence is not null) request.MaxBikeCadence = Math.Round(maxBikeCadence.Value, 1);
+		if (avgRunCadence is not null) request.AvgRunCadence = Math.Round(avgRunCadence.Value, 1);
+		if (maxRunCadence is not null) request.MaxRunCadence = Math.Round(maxRunCadence.Value, 1);
+		if (avgSpeed is not null) request.AvgSpeed = Math.Round(avgSpeed.Value, 3);
+		if (maxSpeed is not null) request.MaxSpeed = Math.Round(maxSpeed.Value, 3);
+		if (indoorCyclingDistanceMeters > 0) request.Distance = Math.Round(indoorCyclingDistanceMeters, 1);
 	}
 
 	private static Metric GetMetric(string slug, WorkoutSamples workoutSamples)
