@@ -27,6 +27,8 @@ public interface IApiClient
 	Task<IFlurlResponse> SignInToGarminAsync();
 	Task SendGarminMfaTokenAsync(GarminAuthenticationMfaTokenPostRequest request);
 
+	Task<TrainingStateGetResponse> TrainingGetAsync();
+
 	Task<GarminMergeGetResponse> GarminMergeGetAsync();
 	Task<GarminMergePostResponse> GarminMergePostAsync(GarminMergePostRequest request);
 	Task<GarminMergePreviewResponse> GarminMergePreviewAsync(GarminMergePreviewRequest request);

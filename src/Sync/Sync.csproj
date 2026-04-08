@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Api.Contract\Api.Contract.csproj" />
     <ProjectReference Include="..\Common\Common.csproj" />
     <ProjectReference Include="..\Conversion\Conversion.csproj" />
     <ProjectReference Include="..\Garmin\Garmin.csproj" />

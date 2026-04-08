@@ -256,6 +256,20 @@ public class ApiClient : IApiClient
 		}
 	}
 
+	public async Task<TrainingStateGetResponse> TrainingGetAsync()
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/training"
+				.GetJsonAsync<TrainingStateGetResponse>();
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
+
 	public async Task<GarminMergeGetResponse> GarminMergeGetAsync()
 	{
 		try

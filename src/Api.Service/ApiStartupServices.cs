@@ -48,6 +48,7 @@ public static class ApiStartupServices
 		services.AddSingleton<IDbMigrations, DbMigrations>();
 
 		// PELOTON
+		services.AddSingleton<ITrainingAnalysisService, TrainingAnalysisService>();
 		services.AddSingleton<IPelotonAuthApiClient, PelotonAuthApiClient>();
 		services.AddSingleton<IPelotonApi, Peloton.ApiClient>();
 		services.AddSingleton<IPelotonService, PelotonService>();

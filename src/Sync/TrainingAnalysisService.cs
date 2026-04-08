@@ -1,0 +1,299 @@
+using Api.Contract;
+using Common.Dto;
+using Common.Dto.Peloton;
+using Peloton;
+using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace Sync;
+
+public class TrainingAnalysisService : ITrainingAnalysisService
+{
+	private static readonly ILogger _logger = Log.ForContext<TrainingAnalysisService>();
+
+	// EMA decay constants: alpha = 2 / (window + 1)
+	private const double CtlAlpha = 2.0 / (42 + 1); // 42-day fitness
+	private const double AtlAlpha = 2.0 / (7 + 1);  // 7-day fatigue
+
+	// TSS-per-hour estimates for non-power disciplines
+	private static readonly Dictionary<FitnessDiscipline, double> DisciplineIntensity = new()
+	{
+		[FitnessDiscipline.Circuit]          = 65,  // Tread Bootcamp — hard by nature
+		[FitnessDiscipline.Running]          = 55,
+		[FitnessDiscipline.Walking]          = 30,
+		[FitnessDiscipline.Cardio]           = 50,
+		[FitnessDiscipline.Bike_Bootcamp]    = 60,
+		[FitnessDiscipline.Strength]         = 40,
+		[FitnessDiscipline.Stretching]       = 10,
+		[FitnessDiscipline.Yoga]             = 15,
+		[FitnessDiscipline.Meditation]       = 5,
+		[FitnessDiscipline.Caesar]           = 55,  // Rowing
+		[FitnessDiscipline.Caesar_Bootcamp]  = 60,
+		[FitnessDiscipline.Cycling]          = 55,  // fallback if no FTP
+	};
+
+	private readonly IPelotonService _pelotonService;
+
+	public TrainingAnalysisService(IPelotonService pelotonService)
+	{
+		_pelotonService = pelotonService;
+	}
+
+	public async Task<TrainingStateGetResponse> GetTrainingStateAsync()
+	{
+		// Fetch 60 days so the EMA has time to warm up before the 42-day window
+		var since = DateTime.UtcNow.AddDays(-60);
+		UserData? userData = null;
+
+		try { userData = await _pelotonService.GetUserDataAsync(); }
+		catch (Exception ex) { _logger.Warning(ex, "Could not fetch Peloton user data; FTP-based TSS unavailable."); }
+
+		ServiceResult<ICollection<Workout>>? serviceResult = null;
+		try { serviceResult = await _pelotonService.GetWorkoutsSinceAsync(since); }
+		catch (Exception ex)
+		{
+			_logger.Error(ex, "Failed to fetch Peloton workouts for training analysis.");
+			return EmptyState();
+		}
+
+		if (serviceResult is null || !serviceResult.Successful || serviceResult.Result is null)
+			return EmptyState();
+
+		var completedWorkouts = serviceResult.Result
+			.Where(w => w.Status == "COMPLETE" && w.End_Time.HasValue)
+			.OrderBy(w => w.Start_Time)
+			.ToList();
+
+		if (completedWorkouts.Count == 0)
+			return EmptyState();
+
+		// Build map of date → total TSS for that day
+		var dailyTss = BuildDailyTss(completedWorkouts, userData);
+
+		// Run EMA from 60 days ago through today, one day at a time
+		var today = DateTime.UtcNow.Date;
+		var startDate = today.AddDays(-60);
+
+		double ctl = 0, atl = 0;
+		for (var d = startDate; d <= today; d = d.AddDays(1))
+		{
+			var tss = dailyTss.TryGetValue(d, out var t) ? t : 0;
+			ctl = ctl + CtlAlpha * (tss - ctl);
+			atl = atl + AtlAlpha * (tss - atl);
+		}
+
+		var tsb = ctl - atl;
+
+		// Recent 14-day detail for the chart
+		var recentLoad = Enumerable.Range(0, 14)
+			.Select(i => today.AddDays(-13 + i))
+			.Select(d =>
+			{
+				var dayWorkouts = completedWorkouts
+					.Where(w => DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime.Date == d)
+					.ToList();
+
+				return new DailyLoadDto
+				{
+					Date = d,
+					TSS = dailyTss.TryGetValue(d, out var t) ? Math.Round(t, 1) : 0,
+					Discipline = dayWorkouts.Count > 0
+						? string.Join(", ", dayWorkouts.Select(w => FriendlyDiscipline(w.Fitness_Discipline)).Distinct())
+						: string.Empty,
+				};
+			})
+			.ToList();
+
+		var recommendation = BuildRecommendation(ctl, atl, tsb, completedWorkouts);
+
+		return new TrainingStateGetResponse
+		{
+			CTL = Math.Round(ctl, 1),
+			ATL = Math.Round(atl, 1),
+			TSB = Math.Round(tsb, 1),
+			Recommendation = recommendation,
+			RecentLoad = recentLoad,
+		};
+	}
+
+	// ─── TSS calculation ─────────────────────────────────────────────────────
+
+	private static Dictionary<DateTime, double> BuildDailyTss(
+		IEnumerable<Workout> workouts, UserData? userData)
+	{
+		var daily = new Dictionary<DateTime, double>();
+
+		foreach (var w in workouts)
+		{
+			var date = DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime.Date;
+			var tss = ComputeTss(w, userData);
+			daily[date] = daily.TryGetValue(date, out var existing) ? existing + tss : tss;
+		}
+
+		return daily;
+	}
+
+	private static double ComputeTss(Workout w, UserData? userData)
+	{
+		var durationSec = w.End_Time!.Value - w.Start_Time;
+		if (durationSec <= 0) return 0;
+
+		// Power-based TSS for cycling disciplines when we have FTP + output
+		if (w.Fitness_Discipline is FitnessDiscipline.Cycling or FitnessDiscipline.Bike_Bootcamp
+			&& w.Total_Work > 0)
+		{
+			var ftp = GetFtp(userData);
+			if (ftp > 0)
+			{
+				// Total_Work from Peloton API is in kJ (matches app display)
+				var avgPowerWatts = w.Total_Work * 1000.0 / durationSec;
+				var intensityFactor = avgPowerWatts / ftp;
+				var tss = durationSec * avgPowerWatts * intensityFactor / (ftp * 3600.0) * 100.0;
+				return Math.Min(tss, 400); // cap sanity
+			}
+		}
+
+		// Duration-based estimate for everything else
+		var intensityPerHour = DisciplineIntensity.TryGetValue(w.Fitness_Discipline, out var rate)
+			? rate : 45;
+
+		return (durationSec / 3600.0) * intensityPerHour;
+	}
+
+	private static int GetFtp(UserData? userData)
+	{
+		if (userData is null) return 0;
+		if (userData.Cycling_Workout_Ftp > 0) return userData.Cycling_Workout_Ftp;
+		if (userData.Cycling_Ftp > 0) return userData.Cycling_Ftp;
+		if (userData.Estimated_Cycling_Ftp > 0) return userData.Estimated_Cycling_Ftp;
+		return 0;
+	}
+
+	// ─── Recommendation engine ───────────────────────────────────────────────
+
+	private static WorkoutRecommendationDto BuildRecommendation(
+		double ctl, double atl, double tsb,
+		IReadOnlyList<Workout> allWorkouts)
+	{
+		var today = DateTime.UtcNow.Date;
+
+		// Days since last workout
+		var lastWorkout = allWorkouts
+			.Where(w => DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime.Date < today)
+			.OrderByDescending(w => w.Start_Time)
+			.FirstOrDefault();
+		var daysSinceLast = lastWorkout is null ? 99
+			: (today - DateTimeOffset.FromUnixTimeSeconds(lastWorkout.Start_Time).UtcDateTime.Date).Days;
+
+		// How many of last 2 days were hard efforts
+		var last2DaysHard = allWorkouts
+			.Where(w =>
+			{
+				var d = DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime.Date;
+				return d >= today.AddDays(-2) && d < today
+					&& w.Fitness_Discipline is FitnessDiscipline.Circuit
+						or FitnessDiscipline.Running
+						or FitnessDiscipline.Cycling
+						or FitnessDiscipline.Bike_Bootcamp;
+			})
+			.Count();
+
+		// Override: mandatory rest/recovery signals
+		if (tsb < -30)
+			return MakeRecommendation(IntensityLevelDto.Rest, tsb, daysSinceLast,
+				"TSB is very low — your body is overreached. Take a full rest day.",
+				"Rest", 0, "No workout today. Sleep and nutrition are your training right now.");
+
+		if (tsb < -15 || last2DaysHard >= 2)
+		{
+			var reason = last2DaysHard >= 2
+				? "2+ hard sessions back-to-back — recovery prevents injury."
+				: $"TSB {tsb:F0}: accumulated fatigue is high.";
+			return MakeRecommendation(IntensityLevelDto.Recovery, tsb, daysSinceLast,
+				reason,
+				"Cycling or Stretching", 20,
+				"Easy Zone 1-2 spin or stretching. Keep HR under 130. No intervals.");
+		}
+
+		// Fresh after a gap — can handle hard
+		if (daysSinceLast >= 3 && tsb >= 0)
+			return MakeRecommendation(IntensityLevelDto.Hard, tsb, daysSinceLast,
+				$"{daysSinceLast} days off + positive form (TSB {tsb:+0;-0}) — you're fresh.",
+				"Circuit (Tread Bootcamp)", 60,
+				"60 min tread bootcamp. Push Z4/Z5 in the run intervals. Own it.");
+
+		// Form-based intensity
+		if (tsb >= 10)
+			return MakeRecommendation(IntensityLevelDto.VeryHard, tsb, daysSinceLast,
+				$"TSB {tsb:+0;-0}: you're very fresh — peak performance window.",
+				"Circuit (Tread Bootcamp)", 60,
+				"60 min tread bootcamp. This is a PR day. Go Z4/Z5 hard throughout.");
+
+		if (tsb >= 0)
+			return MakeRecommendation(IntensityLevelDto.Hard, tsb, daysSinceLast,
+				$"TSB {tsb:+0;-0}: good form, fitness is building.",
+				"Circuit (Tread Bootcamp)", 60,
+				"60 min tread bootcamp. Strong effort — target Z3/Z4 with Z5 pushes in intervals.");
+
+		if (tsb >= -10)
+			return MakeRecommendation(IntensityLevelDto.Moderate, tsb, daysSinceLast,
+				$"TSB {tsb:+0;-0}: mild fatigue accumulating — back off just a touch.",
+				"Cycling or Circuit", 45,
+				"45-60 min moderate effort. Z2/Z3. Not a junk miles day — stay controlled.");
+
+		// tsb < -10
+		return MakeRecommendation(IntensityLevelDto.Easy, tsb, daysSinceLast,
+			$"TSB {tsb:+0;-0}: fatigue building — protect your fitness gains.",
+			"Cycling or Stretching", 30,
+			"Easy 30 min Z1/Z2 ride or stretching. Let adaptation happen.");
+	}
+
+	private static WorkoutRecommendationDto MakeRecommendation(
+		IntensityLevelDto intensity, double tsb, int daysSinceLast,
+		string reason, string discipline, int durationMin, string cue)
+	{
+		return new WorkoutRecommendationDto
+		{
+			Intensity = intensity,
+			Reason = reason,
+			SuggestedDiscipline = discipline,
+			SuggestedDurationMinutes = durationMin,
+			WorkoutCue = cue,
+		};
+	}
+
+	// ─── Helpers ─────────────────────────────────────────────────────────────
+
+	private static string FriendlyDiscipline(FitnessDiscipline d) => d switch
+	{
+		FitnessDiscipline.Circuit          => "Tread Bootcamp",
+		FitnessDiscipline.Running          => "Tread",
+		FitnessDiscipline.Walking          => "Walk",
+		FitnessDiscipline.Cycling          => "Ride",
+		FitnessDiscipline.Bike_Bootcamp    => "Bike Bootcamp",
+		FitnessDiscipline.Strength         => "Strength",
+		FitnessDiscipline.Stretching       => "Stretch",
+		FitnessDiscipline.Yoga             => "Yoga",
+		FitnessDiscipline.Cardio           => "Cardio",
+		FitnessDiscipline.Caesar           => "Row",
+		FitnessDiscipline.Caesar_Bootcamp  => "Row Bootcamp",
+		FitnessDiscipline.Meditation       => "Meditation",
+		_                                  => d.ToString(),
+	};
+
+	private static TrainingStateGetResponse EmptyState() => new TrainingStateGetResponse
+	{
+		CTL = 0, ATL = 0, TSB = 0,
+		Recommendation = new WorkoutRecommendationDto
+		{
+			Intensity = IntensityLevelDto.Moderate,
+			Reason = "Not enough workout data to analyze. Complete a few workouts and check back.",
+			SuggestedDiscipline = "Circuit (Tread Bootcamp)",
+			SuggestedDurationMinutes = 60,
+			WorkoutCue = "Start with a 60 min tread bootcamp and sync it — we'll have a real recommendation next time.",
+		},
+	};
+}

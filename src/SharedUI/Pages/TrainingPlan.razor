@@ -1,0 +1,246 @@
+@page "/training"
+@using Api.Contract
+@using SharedUI.Shared
+@inherits TracingComponentBase
+@inject IApiClient _apiClient
+@inject IHxMessengerService _toaster
+
+<PageTitle>Training Plan</PageTitle>
+
+<HxCard CssClass="mb-3">
+    <HeaderTemplate>
+        <strong>Today's Training Recommendation</strong>
+        <small class="text-muted ms-2">Based on your last 42 days of Peloton workout history</small>
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (_loading)
+        {
+            <HxSpinner Color="ThemeColor.Primary" />
+        }
+        else if (_state is not null)
+        {
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="border rounded p-3 text-center">
+                        <div class="fw-bold text-muted small">FITNESS (CTL)</div>
+                        <div class="display-6 fw-bold text-primary">@_state.CTL.ToString("F0")</div>
+                        <div class="text-muted small">42-day avg load</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="border rounded p-3 text-center">
+                        <div class="fw-bold text-muted small">FATIGUE (ATL)</div>
+                        <div class="display-6 fw-bold text-warning">@_state.ATL.ToString("F0")</div>
+                        <div class="text-muted small">7-day avg load</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="border rounded p-3 text-center">
+                        <div class="fw-bold text-muted small">FORM (TSB)</div>
+                        <div class="display-6 fw-bold @TsbColor">@_state.TSB.ToString("+0;-0;0")</div>
+                        <div class="text-muted small">CTL − ATL · @FormLabel</div>
+                    </div>
+                </div>
+            </div>
+
+            <HxAlert Color="@IntensityColor" CssClass="mb-3">
+                <div class="d-flex align-items-start gap-2">
+                    <span class="fs-4">@IntensityEmoji</span>
+                    <div>
+                        <div class="fw-bold fs-5">@IntensityLabel</div>
+                        <div>@_state.Recommendation.Reason</div>
+                    </div>
+                </div>
+            </HxAlert>
+
+            @if (_state.Recommendation.SuggestedDurationMinutes > 0)
+            {
+                <div class="border rounded p-3 mb-3">
+                    <div class="fw-bold mb-1">
+                        Suggested: @_state.Recommendation.SuggestedDiscipline
+                        @if (_state.Recommendation.SuggestedDurationMinutes > 0)
+                        {
+                            <span class="badge bg-secondary ms-2">@_state.Recommendation.SuggestedDurationMinutes min</span>
+                        }
+                    </div>
+                    <div class="text-muted">@_state.Recommendation.WorkoutCue</div>
+                </div>
+            }
+
+            <HxAlert Color="ThemeColor.Light">
+                <HxIcon Icon="@BootstrapIcon.InfoCircle" />
+                <small>
+                    CTL/ATL/TSB is the same model used by TrainingPeaks and Garmin Coach.
+                    Cycling TSS is calculated from your Peloton power output + FTP.
+                    Tread Bootcamp TSS uses a duration-based estimate (no power sensor on tread).
+                </small>
+            </HxAlert>
+        }
+    </BodyTemplate>
+</HxCard>
+
+<HxCard>
+    <HeaderTemplate>
+        Recent Load (last 14 days)
+        <HxButton Icon="BootstrapIcon.ArrowClockwise" Color="ThemeColor.Light" Size="ButtonSize.Small"
+                  OnClick="LoadAsync" CssClass="ms-2" Tooltip="Refresh" />
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (_loading)
+        {
+            <HxSpinner Color="ThemeColor.Primary" />
+        }
+        else if (_state is not null)
+        {
+            <HxGrid TItem="DailyLoadDto" DataProvider="DailyLoadProviderAsync" Responsive="true" PageSize="14">
+                <Columns>
+                    <HxGridColumn TItem="DailyLoadDto" HeaderText="Date"
+                                  ItemTextSelector="@(item => item.Date.ToString("ddd MMM d"))" />
+                    <HxGridColumn TItem="DailyLoadDto" HeaderText="Workout">
+                        <ItemTemplate>
+                            @if (!string.IsNullOrEmpty(context.Discipline))
+                            {
+                                <span>@context.Discipline</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </ItemTemplate>
+                    </HxGridColumn>
+                    <HxGridColumn TItem="DailyLoadDto" HeaderText="TSS">
+                        <ItemTemplate>
+                            @if (context.TSS > 0)
+                            {
+                                <span class="@TssBarColor(context.TSS)">@context.TSS.ToString("F0")</span>
+                                <div class="progress mt-1" style="height:4px; max-width:100px">
+                                    <div class="progress-bar @TssBarColorClass(context.TSS)"
+                                         style="width:@Math.Min(context.TSS / 1.5, 100).ToString("F0")%"></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted">rest</span>
+                            }
+                        </ItemTemplate>
+                    </HxGridColumn>
+                </Columns>
+            </HxGrid>
+        }
+    </BodyTemplate>
+</HxCard>
+
+@code {
+    private TrainingStateGetResponse? _state;
+    private bool _loading = false;
+
+    public TrainingPlan() : base(nameof(TrainingPlan)) { }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var tracing = Tracing.ClientTrace($"{nameof(TrainingPlan)}.{nameof(OnInitializedAsync)}", kind: ActivityKind.Client);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        using var tracing = Tracing.ClientTrace($"{nameof(TrainingPlan)}.{nameof(LoadAsync)}", kind: ActivityKind.Client);
+        _loading = true;
+        try
+        {
+            _state = await _apiClient.TrainingGetAsync();
+        }
+        catch (ApiClientException e)
+        {
+            _toaster.AddError(e.Message);
+            Log.Error("UI - Failed to load training state.", e);
+        }
+        catch (Exception e)
+        {
+            _toaster.AddError($"Failed to load training plan - {e.Message}");
+            Log.Error("UI - Failed to load training state.", e);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task<GridDataProviderResult<DailyLoadDto>> DailyLoadProviderAsync(GridDataProviderRequest<DailyLoadDto> request)
+    {
+        var items = _state?.RecentLoad?.OrderByDescending(d => d.Date).ToList()
+                    ?? new List<DailyLoadDto>();
+        return Task.FromResult(new GridDataProviderResult<DailyLoadDto>
+        {
+            Data = items,
+            TotalCount = items.Count,
+        });
+    }
+
+    // ─── Display helpers ────────────────────────────────────────────────────
+
+    private string TsbColor => _state?.TSB switch
+    {
+        > 10  => "text-success",
+        > 0   => "text-primary",
+        > -15 => "text-warning",
+        _     => "text-danger",
+    };
+
+    private string FormLabel => _state?.TSB switch
+    {
+        > 10  => "Fresh",
+        > 0   => "Good",
+        > -10 => "Tired",
+        > -25 => "Fatigued",
+        _     => "Overreached",
+    };
+
+    private ThemeColor IntensityColor => _state?.Recommendation.Intensity switch
+    {
+        IntensityLevelDto.Rest      => ThemeColor.Danger,
+        IntensityLevelDto.Recovery  => ThemeColor.Warning,
+        IntensityLevelDto.Easy      => ThemeColor.Info,
+        IntensityLevelDto.Moderate  => ThemeColor.Primary,
+        IntensityLevelDto.Hard      => ThemeColor.Success,
+        IntensityLevelDto.VeryHard  => ThemeColor.Success,
+        _                           => ThemeColor.Secondary,
+    };
+
+    private string IntensityEmoji => _state?.Recommendation.Intensity switch
+    {
+        IntensityLevelDto.Rest      => "🛑",
+        IntensityLevelDto.Recovery  => "🟡",
+        IntensityLevelDto.Easy      => "🔵",
+        IntensityLevelDto.Moderate  => "🟢",
+        IntensityLevelDto.Hard      => "🔥",
+        IntensityLevelDto.VeryHard  => "💥",
+        _                           => "⚪",
+    };
+
+    private string IntensityLabel => _state?.Recommendation.Intensity switch
+    {
+        IntensityLevelDto.Rest      => "Rest Day",
+        IntensityLevelDto.Recovery  => "Recovery",
+        IntensityLevelDto.Easy      => "Easy",
+        IntensityLevelDto.Moderate  => "Moderate",
+        IntensityLevelDto.Hard      => "Hard",
+        IntensityLevelDto.VeryHard  => "Go Hard — Peak Day",
+        _                           => "Moderate",
+    };
+
+    private static string TssBarColor(double tss) => tss switch
+    {
+        > 100 => "text-danger fw-bold",
+        > 70  => "text-warning",
+        > 40  => "text-success",
+        _     => "",
+    };
+
+    private static string TssBarColorClass(double tss) => tss switch
+    {
+        > 100 => "bg-danger",
+        > 70  => "bg-warning",
+        _     => "bg-success",
+    };
+}
