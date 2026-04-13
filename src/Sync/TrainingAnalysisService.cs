@@ -109,6 +109,14 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 
 		var recommendation = BuildRecommendation(ctl, atl, tsb, completedWorkouts);
 
+		// Build set of ride IDs taken in the past 60 days (filter out "already done recently")
+		var recentRideIds = completedWorkouts
+			.Where(w => w.Ride?.Id is not null)
+			.Select(w => w.Ride!.Id)
+			.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+		var suggestedClasses = await GetSuggestedClassesAsync(recommendation.Intensity, recentRideIds);
+
 		return new TrainingStateGetResponse
 		{
 			CTL = Math.Round(ctl, 1),
@@ -116,6 +124,7 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 			TSB = Math.Round(tsb, 1),
 			Recommendation = recommendation,
 			RecentLoad = recentLoad,
+			SuggestedClasses = suggestedClasses,
 		};
 	}
 
@@ -148,8 +157,8 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 			var ftp = GetFtp(userData);
 			if (ftp > 0)
 			{
-				// Total_Work from Peloton API is in kJ (matches app display)
-				var avgPowerWatts = w.Total_Work * 1000.0 / durationSec;
+				// Total_Work from Peloton API is in Joules (app displays Total_Work / 1000 as kJ)
+				var avgPowerWatts = w.Total_Work / durationSec;
 				var intensityFactor = avgPowerWatts / ftp;
 				var tss = durationSec * avgPowerWatts * intensityFactor / (ftp * 3600.0) * 100.0;
 				return Math.Min(tss, 400); // cap sanity
@@ -265,6 +274,63 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		};
 	}
 
+	// ─── Class suggestions ────────────────────────────────────────────────────
+
+	private async Task<ICollection<SuggestedClassDto>> GetSuggestedClassesAsync(
+		IntensityLevelDto intensity, HashSet<string> recentRideIds)
+	{
+		// Map intensity to target discipline and duration band
+		var (targetDiscipline, minDurationSec, maxDurationSec) = intensity switch
+		{
+			IntensityLevelDto.VeryHard  => (FitnessDiscipline.Circuit,    3000, 4200), // 50–70 min tread bootcamp
+			IntensityLevelDto.Hard      => (FitnessDiscipline.Circuit,    3000, 4200), // 50–70 min tread bootcamp
+			IntensityLevelDto.Moderate  => (FitnessDiscipline.Cycling,    2400, 3600), // 40–60 min ride
+			IntensityLevelDto.Easy      => (FitnessDiscipline.Cycling,    1500, 2700), // 25–45 min easy ride
+			IntensityLevelDto.Recovery  => (FitnessDiscipline.Cycling,    1500, 2700), // 25–45 min easy ride
+			IntensityLevelDto.Rest      => (FitnessDiscipline.Stretching, 300,  1800), // 5–30 min stretch
+			_                           => (FitnessDiscipline.Circuit,    3000, 4200),
+		};
+
+		try
+		{
+			// Pull the last 200 workouts (includes history older than the 60-day window)
+			// The paginated endpoint returns ride+instructor data via joins=ride,ride.instructor
+			var result = await _pelotonService.GetRecentWorkoutsAsync(200);
+			if (!result.Successful || result.Result is null) return Array.Empty<SuggestedClassDto>();
+
+			var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+			return result.Result
+				.Where(w =>
+					w.Status == "COMPLETE"
+					&& w.Ride?.Id is not null
+					&& !recentRideIds.Contains(w.Ride.Id)          // not done in last 60 days
+					&& seen.Add(w.Ride.Id)                          // deduplicate same ride
+					&& w.Fitness_Discipline == targetDiscipline
+					&& (w.Ride.Duration ?? 0) >= minDurationSec
+					&& (w.Ride.Duration ?? 0) <= maxDurationSec)
+				.OrderByDescending(w => w.Ride!.Difficulty_Estimate)
+				.Take(5)
+				.Select(w => new SuggestedClassDto
+				{
+					Id = w.Ride!.Id,
+					Title = w.Ride.Title ?? string.Empty,
+					Instructor = w.Ride.Instructor?.Name ?? string.Empty,
+					DurationMinutes = (w.Ride.Duration ?? minDurationSec) / 60,
+					DifficultyScore = Math.Round(w.Ride.Difficulty_Estimate, 1),
+					ImageUrl = w.Ride.Image_Url?.ToString() ?? string.Empty,
+					Discipline = w.Ride.Fitness_Discipline_Display_Name ?? FriendlyDiscipline(targetDiscipline),
+					PelotonUrl = PelotonClassUrl(targetDiscipline, w.Ride.Id),
+				})
+				.ToList();
+		}
+		catch (Exception ex)
+		{
+			_logger.Warning(ex, "Could not build class suggestions from workout history.");
+			return Array.Empty<SuggestedClassDto>();
+		}
+	}
+
 	// ─── Helpers ─────────────────────────────────────────────────────────────
 
 	private static string FriendlyDiscipline(FitnessDiscipline d) => d switch
@@ -283,6 +349,27 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		FitnessDiscipline.Meditation       => "Meditation",
 		_                                  => d.ToString(),
 	};
+
+	private static string PelotonClassUrl(FitnessDiscipline discipline, string rideId)
+	{
+		var slug = discipline switch
+		{
+			FitnessDiscipline.Cycling         => "cycling",
+			FitnessDiscipline.Bike_Bootcamp   => "cycling",
+			FitnessDiscipline.Circuit         => "running",
+			FitnessDiscipline.Running         => "running",
+			FitnessDiscipline.Walking         => "running",
+			FitnessDiscipline.Strength        => "strength",
+			FitnessDiscipline.Stretching      => "stretching",
+			FitnessDiscipline.Yoga            => "yoga",
+			FitnessDiscipline.Meditation      => "meditation",
+			FitnessDiscipline.Caesar          => "rowing",
+			FitnessDiscipline.Caesar_Bootcamp => "rowing",
+			FitnessDiscipline.Cardio          => "cardio",
+			_                                 => "classes",
+		};
+		return $"https://members.onepeloton.com/classes/{slug}?modal=classDetailsModal&classId={rideId}";
+	}
 
 	private static TrainingStateGetResponse EmptyState() => new TrainingStateGetResponse
 	{

@@ -32,6 +32,28 @@
 					<HxInputNumber Label="Match Window (seconds)" @bind-Value="garminSettings.ActivityMatchWindowSeconds" />
 				</div>
 			</div>
+			<div class="row g-3 mt-1">
+				<div class="col-md-12">
+					<HxSwitch Text="Merge FIT with watch recording" @bind-Value="garminSettings.MergeFitWithWatch" Inline="true">
+						<TextTemplate>
+							Merge FIT with watch recording
+							<HxPopover Trigger="PopoverTrigger.Hover|PopoverTrigger.Click|PopoverTrigger.Focus"
+									   Title="<b>Merge FIT with Watch Recording</b>"
+									   Content="@MergeFitDocumentation"
+									   Html="true">
+								<HxIcon Icon="@BootstrapIcon.QuestionCircle" />
+							</HxPopover>
+						</TextTemplate>
+					</HxSwitch>
+					@if (garminSettings.MergeFitWithWatch)
+					{
+						<HxAlert Color="ThemeColor.Warning" CssClass="mt-2">
+							<HxIcon Icon="@BootstrapIcon.ExclamationTriangleFill" />
+							<strong>Warning:</strong> When enabled, P2G will <strong>delete</strong> the original Garmin watch activity and re-upload a merged FIT file. This cannot be undone. Garmin watch data (heart rate, GPS, training effect) is preserved — Peloton fills power, cadence, speed, and resistance.
+						</HxAlert>
+					}
+				</div>
+			</div>
 		}
 		<br />
 		<div class="row g-3">
@@ -263,4 +285,5 @@
 	private string UploadFormatDocumentation => $"Garmin supports uploading either FIT files or TCX files.  FIT is the more modern format and in most cases will result in the most data and features syncing to Garmin.<br /><br />  You must upload the FIT format in order to get extra fields calculated by Garmin such as TSS/VO2/TE.<br /><br /><a href='{configDocumentation}'>Documentation</a><br /><br /><small>(click the <b>?</b> to pin this window)</small>";
 	private string GarminApiDocumentation => $"These settings control how P2G communicates with the Garmin Api. <br /><br /><b>Please do not change these value unless you've been given explicit guidance to do so.</b><br /><br /><a href='{configDocumentation}'>Documentation</a><br /><br /><small>(click the <b>?</b> to pin this window)</small>";
 	private string EnrichDocumentation => "When enabled, P2G will search for an existing Garmin device-recorded activity that overlaps your Peloton workout's start time. If a match is found, P2G enriches it with Peloton-only stats (power, cadence, resistance, speed, class title) and skips uploading a duplicate FIT file. If no match is found, P2G uploads normally.<br /><br /><b>Match Window</b> controls how many seconds of difference is allowed between the Peloton and Garmin start times (default: 900s = 15 min).<br /><br />View the merge history on the <b>Activity Merge</b> page.";
+	private string MergeFitDocumentation => "When enabled, P2G downloads the watch FIT file from Garmin, injects Peloton metrics (power, cadence, speed, resistance) into it, deletes the original Garmin activity, and re-uploads the merged FIT.<br /><br /><b>Garmin data always wins</b> — watch values for HR, GPS, and training effect are preserved unchanged. Peloton only fills fields the watch left empty.<br /><br /><b>⚠ Caution:</b> The original Garmin activity is permanently deleted before upload. If the upload fails, the activity will be lost.";
 }

@@ -27,6 +27,9 @@ namespace Garmin
 		Task<UploadResponse> UploadActivity(string filePath, string format, GarminApiAuthentication auth);
 		Task<ICollection<GarminActivitySummary>> SearchActivitiesAsync(DateTime startDate, DateTime endDate, GarminApiAuthentication auth);
 		Task UpdateActivityAsync(long activityId, GarminActivityUpdateRequest request, GarminApiAuthentication auth);
+		Task<byte[]> DownloadActivityFitAsync(long activityId, GarminApiAuthentication auth);
+		Task DeleteActivityAsync(long activityId, GarminApiAuthentication auth);
+		Task<long?> PollUploadActivityIdAsync(long uploadId, GarminApiAuthentication auth);
 	}
 
 	public class ApiClient : IGarminApiClient
@@ -150,13 +153,15 @@ namespace Garmin
 			var settings = await _settingsService.GetSettingsAsync();
 
 			var fileName = Path.GetFileName(filePath);
-			var response = await WithConnectApiHeaders($"{settings.Garmin.Api.UploadActivityUrl}/{format}", auth, settings.Garmin.Api)
+			var rawJson = await WithConnectApiHeaders($"{settings.Garmin.Api.UploadActivityUrl}/{format}", auth, settings.Garmin.Api)
 				.AllowHttpStatus("2xx,409")
 				.PostMultipartAsync((data) =>
 				{
 					data.AddFile("\"file\"", path: filePath, contentType: "application/octet-stream", fileName: $"\"{fileName}\"");
 				})
-				.ReceiveJson<UploadResponse>();
+				.ReceiveString();
+			_logger.Debug("Upload response: {Json}", rawJson);
+			var response = System.Text.Json.JsonSerializer.Deserialize<UploadResponse>(rawJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
 			var result = response.DetailedImportResult;
 
@@ -211,6 +216,89 @@ namespace Garmin
 
 			var responseBody = await response.GetStringAsync();
 			_logger.Information("UpdateActivity response {Status}: {Body}", response.StatusCode, responseBody);
+		}
+
+		public async Task<byte[]> DownloadActivityFitAsync(long activityId, GarminApiAuthentication auth)
+		{
+			var settings = await _settingsService.GetSettingsAsync();
+
+			var bytes = await WithConnectApiHeaders($"{settings.Garmin.Api.ActivityDownloadUrl}/{activityId}", auth, settings.Garmin.Api)
+				.GetBytesAsync();
+
+			// Garmin returns a ZIP archive containing the FIT file — extract it
+			if (bytes.Length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B && bytes[2] == 0x03 && bytes[3] == 0x04)
+			{
+				using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(bytes), System.IO.Compression.ZipArchiveMode.Read);
+				var fitEntry = zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".fit", StringComparison.OrdinalIgnoreCase));
+				if (fitEntry is not null)
+				{
+					using var ms = new MemoryStream();
+					using var stream = fitEntry.Open();
+					await stream.CopyToAsync(ms);
+					_logger.Information("Extracted {FileName} ({Bytes} bytes) from Garmin ZIP download", fitEntry.Name, ms.Length);
+					return ms.ToArray();
+				}
+				_logger.Warning("Downloaded ZIP for activity {ActivityId} but found no .fit entry inside", activityId);
+			}
+
+			return bytes;
+		}
+
+		public async Task DeleteActivityAsync(long activityId, GarminApiAuthentication auth)
+		{
+			var settings = await _settingsService.GetSettingsAsync();
+
+			_logger.Information("Deleting Garmin activity {ActivityId} to replace with merged FIT", activityId);
+
+			await WithConnectApiHeaders($"{settings.Garmin.Api.ActivityUpdateUrl}/{activityId}", auth, settings.Garmin.Api)
+				.DeleteAsync();
+		}
+
+		public async Task<long?> PollUploadActivityIdAsync(long uploadId, GarminApiAuthentication auth)
+		{
+			var settings = await _settingsService.GetSettingsAsync();
+			var url = $"{settings.Garmin.Api.UploadActivityUrl}/{uploadId}";
+
+			for (int attempt = 1; attempt <= 8; attempt++)
+			{
+				await Task.Delay(TimeSpan.FromSeconds(attempt == 1 ? 2 : 3));
+
+				try
+				{
+					var response = await WithConnectApiHeaders(url, auth, settings.Garmin.Api)
+						.AllowAnyHttpStatus()
+						.GetAsync();
+
+					var rawJson = await response.GetStringAsync();
+					_logger.Information("FIT merge: poll attempt {Attempt} status {Status}: {Json}", attempt, response.StatusCode, rawJson);
+
+					if (!response.ResponseMessage.IsSuccessStatusCode)
+					{
+						_logger.Warning("FIT merge: poll returned {Status}, stopping", response.StatusCode);
+						return null;
+					}
+
+					var uploadResponse = System.Text.Json.JsonSerializer.Deserialize<UploadResponse>(rawJson,
+						new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+					var internalId = uploadResponse?.DetailedImportResult?.Successes?.FirstOrDefault()?.InternalId;
+					if (internalId is not null)
+					{
+						_logger.Information("FIT merge: new Garmin activity ID {NewId} resolved after {Attempt} poll(s)", internalId, attempt);
+						return internalId;
+					}
+
+					_logger.Information("FIT merge: upload {UploadId} still processing (attempt {Attempt}/8)", uploadId, attempt);
+				}
+				catch (Exception e)
+				{
+					_logger.Warning(e, "FIT merge: poll attempt {Attempt} threw {Message}", attempt, e.Message);
+					return null;
+				}
+			}
+
+			_logger.Warning("FIT merge: could not resolve new activity ID for upload {UploadId} after polling", uploadId);
+			return null;
 		}
 	}
 }

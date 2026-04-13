@@ -79,6 +79,62 @@
     </BodyTemplate>
 </HxCard>
 
+<HxCard CssClass="mb-3">
+    <HeaderTemplate>
+        <strong>Suggested Classes</strong>
+        <small class="text-muted ms-2">From your workout history · not done in the last 60 days</small>
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (_loading)
+        {
+            <HxSpinner Color="ThemeColor.Primary" />
+        }
+        else if (_state?.SuggestedClasses is { Count: > 0 } classes)
+        {
+            <div class="row g-3">
+                @foreach (var cls in classes)
+                {
+                    <div class="col-sm-6 col-lg-4">
+                        <a href="@cls.PelotonUrl" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                            <div class="card h-100 shadow-sm">
+                                @if (!string.IsNullOrEmpty(cls.ImageUrl))
+                                {
+                                    <img src="@cls.ImageUrl" class="card-img-top" alt="@cls.Title"
+                                         style="height:140px; object-fit:cover;" />
+                                }
+                                <div class="card-body p-2">
+                                    <div class="small fw-bold mb-1 lh-sm text-dark">@cls.Title</div>
+                                    <div class="text-muted small">@cls.Instructor</div>
+                                </div>
+                                <div class="card-footer p-2 d-flex gap-2 flex-wrap">
+                                    <span class="badge bg-secondary">@cls.DurationMinutes min</span>
+                                    <span class="badge @DifficultyBadge(cls.DifficultyScore)">@cls.DifficultyScore.ToString("F1")</span>
+                                    <span class="badge bg-light text-dark border">@cls.Discipline</span>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                }
+            </div>
+        }
+        else if (_state is not null)
+        {
+            <p class="text-muted mb-0">No class suggestions available right now.</p>
+        }
+    </BodyTemplate>
+</HxCard>
+
+@if (_state is not null && !_loading)
+{
+    <div class="d-flex align-items-center gap-2 mb-3 p-2 border rounded bg-light">
+        <span class="fs-5">@TrainingDirectionEmoji</span>
+        <div>
+            <div class="fw-semibold small">@TrainingDirectionLabel</div>
+            <div class="text-muted small">@TrainingDirectionDetail</div>
+        </div>
+    </div>
+}
+
 <HxCard>
     <HeaderTemplate>
         Recent Load (last 14 days)
@@ -105,6 +161,14 @@
                             else
                             {
                                 <span class="text-muted">—</span>
+                            }
+                        </ItemTemplate>
+                    </HxGridColumn>
+                    <HxGridColumn TItem="DailyLoadDto" HeaderText="Benefit">
+                        <ItemTemplate>
+                            @if (context.TSS > 0)
+                            {
+                                <span class="small">@PrimaryBenefit(context.Discipline, context.TSS)</span>
                             }
                         </ItemTemplate>
                     </HxGridColumn>
@@ -243,4 +307,73 @@
         > 70  => "bg-warning",
         _     => "bg-success",
     };
+
+    private static string DifficultyBadge(double score) => score switch
+    {
+        >= 8.0 => "bg-danger",
+        >= 6.0 => "bg-warning text-dark",
+        _      => "bg-success",
+    };
+
+    private static string PrimaryBenefit(string discipline, double tss)
+    {
+        if (discipline.Contains("Stretch") || discipline.Contains("Yoga"))  return "🧘 Flexibility";
+        if (discipline.Contains("Meditation"))                               return "💤 Recovery";
+        if (discipline.Contains("Strength"))                                 return "💪 Strength";
+        if (discipline.Contains("Tread") || discipline.Contains("Run"))
+            return tss > 80 ? "🔥 VO2 Max" : tss > 50 ? "🟢 Aerobic Cap." : "🔵 Base";
+        if (discipline.Contains("Row"))
+            return tss > 70 ? "🟢 Aerobic Cap." : "🔵 Base";
+        // Cycling / Bike Bootcamp / fallback
+        return tss > 90 ? "🟠 Threshold" : tss > 60 ? "🟡 Tempo" : tss > 30 ? "🔵 Base" : "💤 Recovery";
+    }
+
+    // ─── Training direction ───────────────────────────────────────────────────
+
+    private string TrainingDirectionEmoji
+    {
+        get
+        {
+            var active = _state?.RecentLoad?.Where(d => d.TSS > 0).ToList() ?? new();
+            if (active.Count == 0) return "📊";
+            var highPct = active.Count(d => d.TSS > 70) * 100.0 / active.Count;
+            return highPct > 60 ? "⚡" : highPct > 30 ? "🟢" : "🔵";
+        }
+    }
+
+    private string TrainingDirectionLabel
+    {
+        get
+        {
+            var active = _state?.RecentLoad?.Where(d => d.TSS > 0).ToList() ?? new();
+            if (active.Count == 0) return "No recent training";
+            var highPct = active.Count(d => d.TSS > 70) * 100.0 / active.Count;
+            var avgTss = active.Average(d => d.TSS);
+            if (highPct > 60) return "High Intensity Focus";
+            if (highPct > 30) return "Mixed Intensity";
+            if (avgTss > 50)  return "Aerobic Base Building";
+            return "Light / Recovery Phase";
+        }
+    }
+
+    private string TrainingDirectionDetail
+    {
+        get
+        {
+            var active = _state?.RecentLoad?.Where(d => d.TSS > 0).ToList() ?? new();
+            if (active.Count == 0) return "";
+            var avgTss = active.Average(d => d.TSS);
+            var highCount = active.Count(d => d.TSS > 70);
+            var topDisciplines = active
+                .SelectMany(d => d.Discipline.Split(", "))
+                .Where(d => !string.IsNullOrEmpty(d))
+                .GroupBy(d => d)
+                .OrderByDescending(g => g.Count())
+                .Take(2)
+                .Select(g => $"{g.Key} ({g.Count()}x)")
+                .ToList();
+            var disciplines = topDisciplines.Count > 0 ? string.Join(" · ", topDisciplines) : "";
+            return $"Avg {avgTss:F0} TSS/session · {highCount} hard days (>70) · {disciplines}";
+        }
+    }
 }

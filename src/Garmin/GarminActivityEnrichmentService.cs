@@ -6,8 +6,10 @@ using Garmin.Auth;
 using Garmin.Database;
 using Garmin.Dto;
 using Serilog;
+using Conversion;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -209,7 +211,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 				try
 				{
-					await ApplyGroupUpdateAsync(garminActivityId, group, auth);
+					await ApplyGroupUpdateAsync(garminActivityId, group, auth, settings);
 				}
 				catch (Exception e)
 				{
@@ -221,9 +223,11 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		return results;
 	}
 
-	private async Task ApplyGroupUpdateAsync(long garminActivityId, List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group, GarminApiAuthentication auth)
+	private async Task ApplyGroupUpdateAsync(long garminActivityId, List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group, GarminApiAuthentication auth, Settings settings)
 	{
 		// Use the workout with the most total output as the "primary" (name source).
+		// For ties or missing data, first in list wins.
+		// Use the workout with the most total output as the primary (name source).
 		// For ties or missing data, first in list wins.
 		var primary = group
 			.OrderByDescending(g => g.P2GWorkout.Workout.Total_Work)
@@ -233,21 +237,27 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		_logger.Information("Enriching Garmin activity {GarminActivityId} with {Count} Peloton workout(s): {WorkoutIds}.",
 			garminActivityId, group.Count, workoutIds);
 
-		var updateRequest = new GarminActivityUpdateRequest
+		if (settings.Garmin.MergeFitWithWatch)
 		{
-			ActivityId = garminActivityId,
-			ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
-			Description = group.Count == 1
-				? BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples)
-				: BuildCombinedDescription(group.Select(g => g.P2GWorkout)),
-		};
+			await ApplyFitMergeAsync(garminActivityId, primary, group, auth);
+		}
+		else
+		{
+			var updateRequest = new GarminActivityUpdateRequest
+			{
+				ActivityId = garminActivityId,
+				ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
+				Description = group.Count == 1
+					? BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples)
+					: BuildCombinedDescription(group.Select(g => g.P2GWorkout)),
+			};
 
-		// Aggregate numeric fields across all workouts in group
-		PopulateStructuredFields(updateRequest, group.Select(g => g.P2GWorkout));
+			// Aggregate numeric fields across all workouts in group
+			PopulateStructuredFields(updateRequest, group.Select(g => g.P2GWorkout));
 
-		await _apiClient.UpdateActivityAsync(garminActivityId, updateRequest, auth);
-
-		_logger.Information("Successfully enriched Garmin activity {GarminActivityId}.", garminActivityId);
+			await _apiClient.UpdateActivityAsync(garminActivityId, updateRequest, auth);
+			_logger.Information("Successfully enriched Garmin activity {GarminActivityId} via metadata update.", garminActivityId);
+		}
 
 		foreach (var (p2gWorkout, result) in group)
 		{
@@ -261,6 +271,84 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			});
 		}
 	}
+
+	private async Task ApplyFitMergeAsync(
+		long garminActivityId,
+		(P2GWorkout P2GWorkout, GarminEnrichmentResult Result) primary,
+		List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group,
+		GarminApiAuthentication auth)
+	{
+		_logger.Information("FIT merge: downloading watch FIT for Garmin activity {GarminActivityId}", garminActivityId);
+
+		byte[] watchFitBytes;
+		try
+		{
+			watchFitBytes = await _apiClient.DownloadActivityFitAsync(garminActivityId, auth);
+		}
+		catch (Exception e)
+		{
+			_logger.Warning(e, "FIT merge: failed to download watch FIT for activity {GarminActivityId}, falling back to metadata update. {Message}",
+				garminActivityId, e.Message);
+			var fallback = new GarminActivityUpdateRequest
+			{
+				ActivityId = garminActivityId,
+				ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
+				Description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples),
+			};
+			PopulateStructuredFields(fallback, group.Select(g => g.P2GWorkout));
+			await _apiClient.UpdateActivityAsync(garminActivityId, fallback, auth);
+			return;
+		}
+
+		_logger.Information("FIT merge: merging Peloton metrics into watch FIT ({Bytes} bytes)", watchFitBytes.Length);
+		var mergedFitBytes = GarminFitMergeService.MergeWatchFitWithPeloton(watchFitBytes, primary.P2GWorkout.WorkoutSamples, primary.P2GWorkout.Workout.Start_Time);
+
+		_logger.Information("FIT merge: deleting original Garmin activity {GarminActivityId} before uploading merged FIT", garminActivityId);
+		await _apiClient.DeleteActivityAsync(garminActivityId, auth);
+
+		// Write merged FIT to a temp file for upload
+		var tempPath = Path.Combine(Path.GetTempPath(), $"p2g_merge_{garminActivityId}.fit");
+		try
+		{
+			await File.WriteAllBytesAsync(tempPath, mergedFitBytes);
+			var uploadResponse = await _apiClient.UploadActivity(tempPath, ".fit", auth);
+			_logger.Information("FIT merge: uploaded merged FIT for original activity {GarminActivityId}", garminActivityId);
+
+			// Garmin processes FITs asynchronously — wait briefly then find the new activity by time search
+			var workoutStart = DateTimeOffset.FromUnixTimeSeconds(primary.P2GWorkout.Workout.Start_Time).UtcDateTime;
+			long? newActivityId = null;
+			for (int attempt = 1; attempt <= 5; attempt++)
+			{
+				await Task.Delay(TimeSpan.FromSeconds(attempt == 1 ? 3 : 4));
+				var recent = await _apiClient.SearchActivitiesAsync(workoutStart.AddMinutes(-2), workoutStart.AddMinutes(10), auth);
+				newActivityId = recent?.FirstOrDefault(a => a.ActivityId != garminActivityId)?.ActivityId;
+				if (newActivityId is not null)
+				{
+					_logger.Information("FIT merge: found new activity {NewId} via search after {Attempt} attempt(s)", newActivityId, attempt);
+					break;
+				}
+				_logger.Information("FIT merge: new activity not visible yet (attempt {Attempt}/5)", attempt);
+			}
+
+			if (newActivityId is not null)
+			{
+				var nameUpdate = new GarminActivityUpdateRequest
+				{
+					ActivityId = newActivityId.Value,
+					ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
+					Description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples),
+				};
+				await _apiClient.UpdateActivityAsync(newActivityId.Value, nameUpdate, auth);
+				_logger.Information("FIT merge: updated activity name to '{Name}' for new activity {NewId}", nameUpdate.ActivityName, newActivityId.Value);
+			}
+		}
+		finally
+		{
+			if (File.Exists(tempPath))
+				File.Delete(tempPath);
+		}
+	}
+
 
 	private static GarminEnrichmentResult NoMatchResult(Workout workout) => new GarminEnrichmentResult
 	{

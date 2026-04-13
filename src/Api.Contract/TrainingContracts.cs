@@ -18,6 +18,9 @@ public record TrainingStateGetResponse
 
 	/// <summary>Per-day TSS for the last 14 days, newest first.</summary>
 	public ICollection<DailyLoadDto> RecentLoad { get; init; } = new List<DailyLoadDto>();
+
+	/// <summary>Peloton classes recommended based on today's training load — filtered to ones not taken in the last 60 days.</summary>
+	public ICollection<SuggestedClassDto> SuggestedClasses { get; init; } = new List<SuggestedClassDto>();
 }
 
 public record WorkoutRecommendationDto
@@ -44,4 +47,16 @@ public record DailyLoadDto
 	public DateTime Date { get; init; }
 	public double TSS { get; init; }
 	public string Discipline { get; init; } = string.Empty;
+}
+
+public record SuggestedClassDto
+{
+	public string Id { get; init; } = string.Empty;
+	public string Title { get; init; } = string.Empty;
+	public string Instructor { get; init; } = string.Empty;
+	public int DurationMinutes { get; init; }
+	public double DifficultyScore { get; init; }
+	public string ImageUrl { get; init; } = string.Empty;
+	public string Discipline { get; init; } = string.Empty;
+	public string PelotonUrl { get; init; } = string.Empty;
 }
