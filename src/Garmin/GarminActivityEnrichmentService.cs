@@ -287,16 +287,8 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		}
 		catch (Exception e)
 		{
-			_logger.Warning(e, "FIT merge: failed to download watch FIT for activity {GarminActivityId}, falling back to metadata update. {Message}",
+			_logger.Warning(e, "FIT merge: failed to download watch FIT for activity {GarminActivityId} — skipping, no changes made. {Message}",
 				garminActivityId, e.Message);
-			var fallback = new GarminActivityUpdateRequest
-			{
-				ActivityId = garminActivityId,
-				ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
-				Description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples),
-			};
-			PopulateStructuredFields(fallback, group.Select(g => g.P2GWorkout));
-			await _apiClient.UpdateActivityAsync(garminActivityId, fallback, auth);
 			return;
 		}
 
