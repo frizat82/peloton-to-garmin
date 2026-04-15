@@ -278,6 +278,22 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group,
 		GarminApiAuthentication auth)
 	{
+		var workoutStart = DateTimeOffset.FromUnixTimeSeconds(primary.P2GWorkout.Workout.Start_Time).UtcDateTime;
+
+		// Snapshot all activity IDs in the vicinity BEFORE we delete/upload anything,
+		// so the post-upload search can identify only truly NEW activities and not
+		// accidentally grab an existing nearby activity (e.g. a back-to-back ride).
+		var preExistingIds = new HashSet<long>();
+		try
+		{
+			var preExisting = await _apiClient.SearchActivitiesAsync(workoutStart.AddMinutes(-15), workoutStart.AddMinutes(15), auth);
+			if (preExisting is not null)
+				foreach (var a in preExisting)
+					preExistingIds.Add(a.ActivityId);
+			_logger.Information("FIT merge: snapshotted {Count} pre-existing activity IDs near workout start", preExistingIds.Count);
+		}
+		catch (Exception e) { _logger.Warning(e, "FIT merge: could not snapshot pre-existing activities; post-upload ID detection may be less precise."); }
+
 		_logger.Information("FIT merge: downloading watch FIT for Garmin activity {GarminActivityId}", garminActivityId);
 
 		byte[] watchFitBytes;
@@ -306,14 +322,16 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			var uploadResponse = await _apiClient.UploadActivity(tempPath, ".fit", auth);
 			_logger.Information("FIT merge: uploaded merged FIT for original activity {GarminActivityId}", garminActivityId);
 
-			// Garmin processes FITs asynchronously — wait briefly then find the new activity by time search
-			var workoutStart = DateTimeOffset.FromUnixTimeSeconds(primary.P2GWorkout.Workout.Start_Time).UtcDateTime;
 			long? newActivityId = null;
 			for (int attempt = 1; attempt <= 5; attempt++)
 			{
 				await Task.Delay(TimeSpan.FromSeconds(attempt == 1 ? 3 : 4));
-				var recent = await _apiClient.SearchActivitiesAsync(workoutStart.AddMinutes(-2), workoutStart.AddMinutes(10), auth);
-				newActivityId = recent?.FirstOrDefault(a => a.ActivityId != garminActivityId)?.ActivityId;
+				var recent = await _apiClient.SearchActivitiesAsync(workoutStart.AddMinutes(-15), workoutStart.AddMinutes(15), auth);
+				// Only accept an activity that did not exist before the upload (truly new)
+				newActivityId = recent?
+					.Where(a => !preExistingIds.Contains(a.ActivityId) && a.ActivityId != garminActivityId)
+					.Select(a => (long?)a.ActivityId)
+					.FirstOrDefault();
 				if (newActivityId is not null)
 				{
 					_logger.Information("FIT merge: found new activity {NewId} via search after {Attempt} attempt(s)", newActivityId, attempt);
@@ -376,9 +394,13 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			var isSportMatch = garminSportKey is not null &&
 								activity.ActivityType?.TypeKey?.Contains(garminSportKey, StringComparison.OrdinalIgnoreCase) == true;
 
+			// Use startDeltaSeconds (actual gap between start times) to rank candidates —
+			// not effectiveDelta — so a workout whose start time truly aligns with a
+			// later Garmin activity always wins over an earlier activity it merely
+			// "falls within". The effectiveDelta is only used above to gate admissibility.
 			var isBetter = best.Activity is null
 				|| (isSportMatch && !best.IsSportMatch)
-				|| (isSportMatch == best.IsSportMatch && effectiveDelta < best.DeltaSeconds);
+				|| (isSportMatch == best.IsSportMatch && startDeltaSeconds < best.DeltaSeconds);
 
 			if (isBetter)
 				best = (activity, isSportMatch, startDeltaSeconds);
