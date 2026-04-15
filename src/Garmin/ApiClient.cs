@@ -199,7 +199,7 @@ namespace Garmin
 					startDate = startDate.ToString("yyyy-MM-dd"),
 					endDate = endDate.ToString("yyyy-MM-dd"),
 					start = 0,
-					limit = 50
+					limit = 200
 				})
 				.GetJsonAsync<ICollection<GarminActivitySummary>>();
 		}

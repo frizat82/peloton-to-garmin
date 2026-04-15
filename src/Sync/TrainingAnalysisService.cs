@@ -82,13 +82,25 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		try
 		{
 			var auth = await _garminAuthService.GetGarminAuthenticationAsync();
-			if (auth is not null)
+			if (auth is not null && auth.AuthStage == Garmin.Dto.AuthStage.Completed)
+			{
 				garminActivities = await _garminApiClient.SearchActivitiesAsync(since, DateTime.UtcNow, auth);
+				_logger.Information("Training: fetched {Count} Garmin activities for hrTSS ({WithHr} have avg HR)",
+					garminActivities.Count,
+					garminActivities.Count(a => a.AverageHR > 0));
+			}
+			else
+			{
+				_logger.Information("Training: Garmin not authenticated (stage={Stage}); using discipline-based TSS estimates.",
+					auth?.AuthStage.ToString() ?? "null");
+			}
 		}
 		catch (Exception ex) { _logger.Warning(ex, "Could not fetch Garmin activities for hrTSS; falling back to discipline estimates."); }
 
 		// Derive user max HR as the highest MaxHR seen across all Garmin activities (proxy for physiological max)
 		var userMaxHR = garminActivities.Where(a => a.MaxHR > 0).Select(a => a.MaxHR!.Value).DefaultIfEmpty(0).Max();
+		_logger.Information("Training: userMaxHR={MaxHR} (derived from {Count} Garmin activities with HR data)",
+			userMaxHR, garminActivities.Count(a => a.MaxHR > 0));
 
 		// Build map of date → total TSS for that day
 		var dailyTss = BuildDailyTss(completedWorkouts, userData, garminActivities, userMaxHR);
@@ -334,16 +346,24 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 			// Pull from Peloton catalog — broad fetch so we have enough to filter by duration/difficulty
 			var rides = await _pelotonService.GetCatalogClassesAsync(browseCategory, 100);
 
-			return rides
+			_logger.Information("Catalog: fetched {Total} rides for category '{Category}'; filtering dur=[{Min},{Max}]s diff=[{DiffMin:F1},{DiffMax:F1}]",
+				rides.Count, browseCategory, minDurationSec, maxDurationSec, minDifficulty, maxDifficulty);
+
+			var filtered = rides
 				.Where(r =>
 					r.Id is not null
-					&& !recentRideIds.Contains(r.Id)              // not done in last 60 days
+					&& !recentRideIds.Contains(r.Id)
 					&& (r.Duration ?? 0) >= minDurationSec
 					&& (r.Duration ?? 0) <= maxDurationSec
 					&& r.Difficulty_Estimate >= minDifficulty
 					&& r.Difficulty_Estimate <= maxDifficulty
 					&& !r.Is_Archived)
-				.OrderByDescending(r => r.Overall_Estimate)       // highest overall rating first
+				.ToList();
+
+			_logger.Information("Catalog: {Count} rides passed filters", filtered.Count);
+
+			return filtered
+				.OrderByDescending(r => r.Overall_Estimate)
 				.Take(6)
 				.Select(r => new SuggestedClassDto
 				{
@@ -361,7 +381,7 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		}
 		catch (Exception ex)
 		{
-			_logger.Warning(ex, "Could not fetch class suggestions from Peloton catalog.");
+			_logger.Warning(ex, "Could not fetch class suggestions from Peloton catalog (category={Category}): {Message}", browseCategory, ex.Message);
 			return Array.Empty<SuggestedClassDto>();
 		}
 	}
