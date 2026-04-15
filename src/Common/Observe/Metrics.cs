@@ -109,7 +109,7 @@ public static class DbMetrics
 
 public static class AppMetrics
 {
-	public static readonly Gauge UpdateAvailable =  PromMetrics.CreateGauge("p2g_update_available", "Indicates a newer version of P2G is availabe.", new GaugeConfiguration()
+	public static readonly Gauge UpdateAvailable = PromMetrics.CreateGauge("p2g_update_available", "Indicates a newer version of P2G is availabe.", new GaugeConfiguration()
 	{
 		LabelNames = new[] { Metrics.Label.Version, Metrics.Label.LatestVersion }
 	});
@@ -121,7 +121,8 @@ public static class AppMetrics
 			UpdateAvailable
 				.WithLabels(Constants.AppVersion, latestVersion ?? string.Empty)
 				.Set(1);
-		} else
+		}
+		else
 		{
 			UpdateAvailable
 				.WithLabels(Constants.AppVersion, Constants.AppVersion)

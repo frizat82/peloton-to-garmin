@@ -51,7 +51,7 @@ public class AnnualChallengeService : IAnnualChallengeService
 		result.Result.EarnedMinutes = progress.Metric_Value;
 		result.Result.CurrentDailyPace = progress.Metric_Value / elapsedDays;
 		result.Result.CurrentWeeklyPace = result.Result.CurrentDailyPace * 7;
-		result.Result.Tiers = tiers.Where(t => t.Metric_Value > 0).Select(t => 
+		result.Result.Tiers = tiers.Where(t => t.Metric_Value > 0).Select(t =>
 		{
 			var requiredMinutes = t.Metric_Value;
 			var actualMinutes = progress.Metric_Value;
@@ -63,7 +63,7 @@ public class AnnualChallengeService : IAnnualChallengeService
 				Title = t.Title,
 				RequiredMinutes = requiredMinutes,
 				HasEarned = onTrackDetails.HasEarned,
-				PercentComplete= onTrackDetails.PercentComplete,
+				PercentComplete = onTrackDetails.PercentComplete,
 				IsOnTrackToEarndByEndOfYear = onTrackDetails.IsOnTrackToEarnByEndOfYear,
 				MinutesBehindPace = onTrackDetails.MinutesBehindPace,
 				MinutesAheadOfPace = onTrackDetails.MinutesBehindPace * -1,

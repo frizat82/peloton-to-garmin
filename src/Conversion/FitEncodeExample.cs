@@ -9,10 +9,10 @@
 //
 // Copyright 2020 Garmin International, Inc.
 ////////////////////////////////////////////////////////////////////////////////
+using Dynastream.Fit;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Dynastream.Fit;
 
 namespace ActivityEncode
 {
@@ -45,7 +45,7 @@ namespace ActivityEncode
 			var developerIdMesg = new DeveloperDataIdMesg();
 			// It is a BEST PRACTICE to reuse the same Guid for all FIT files created by your platform
 			byte[] appId = new Guid("00010203-0405-0607-0809-0A0B0C0D0E0F").ToByteArray();
-			for(int i = 0; i < appId.Length; i++)
+			for (int i = 0; i < appId.Length; i++)
 			{
 				developerIdMesg.SetApplicationId(i, appId[i]);
 			}
@@ -77,7 +77,7 @@ namespace ActivityEncode
 			var timestamp = new Dynastream.Fit.DateTime(startTime);
 
 			// Create one hour (3600 seconds) of Record data
-			for(uint i = 0; i <= 3600; i++)
+			for (uint i = 0; i <= 3600; i++)
 			{
 				// Create a new Record message and set the timestamp
 				var recordMesg = new RecordMesg();
@@ -233,11 +233,11 @@ namespace ActivityEncode
 			var timestamp = new Dynastream.Fit.DateTime(startTime);
 			ushort messageIndex = 0;
 
-			foreach(var swimLength in swimData)
+			foreach (var swimLength in swimData)
 			{
 				string type = (string)swimLength["type"];
 
-				if(type.Equals("Lap"))
+				if (type.Equals("Lap"))
 				{
 					// Create a Lap message, set its fields, and write it to the file
 					var lapMesg = new LapMesg();
@@ -289,7 +289,7 @@ namespace ActivityEncode
 					recordMesg.SetDistance(sessionDistance + poolLength);
 
 					// Is this an Active Length?
-					if(lengthType == LengthType.Active)
+					if (lengthType == LengthType.Active)
 					{
 						// Get the Active data from the model
 						string stroke = swimLength.ContainsKey("stroke") ? (String)swimLength["stroke"] : "Freestyle";
@@ -300,7 +300,7 @@ namespace ActivityEncode
 						lengthMesg.SetAvgSpeed(poolLength / (float)duration);
 						lengthMesg.SetSwimStroke(swimStroke);
 
-						if(strokes > 0)
+						if (strokes > 0)
 						{
 							lengthMesg.SetTotalStrokes((ushort)strokes);
 							lengthMesg.SetAvgSwimmingCadence((byte)(strokes * 60U / duration));
@@ -308,7 +308,7 @@ namespace ActivityEncode
 
 						// Set the Active data on the Record Message
 						recordMesg.SetSpeed(poolLength / (float)duration);
-						if(strokes > 0)
+						if (strokes > 0)
 						{
 							recordMesg.SetCadence((byte)((strokes * 60U) / duration));
 						}
@@ -416,7 +416,7 @@ namespace ActivityEncode
 			encoder.Write(fileIdMesg);
 			encoder.Write(deviceInfoMesg);
 
-			foreach(Mesg message in messages)
+			foreach (Mesg message in messages)
 			{
 				encoder.Write(message);
 			}

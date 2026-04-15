@@ -41,7 +41,8 @@ public class SettingsController : Controller
 			settingsResponse.Garmin.Password = null;
 
 			return settingsResponse;
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 		}
@@ -68,7 +69,8 @@ public class SettingsController : Controller
 				return result.GetResultForError();
 
 			return Ok(result.Result);
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 		}
@@ -95,7 +97,8 @@ public class SettingsController : Controller
 				return result.GetResultForError();
 
 			return Ok(result.Result);
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 		}
@@ -122,7 +125,8 @@ public class SettingsController : Controller
 				return result.GetResultForError();
 
 			return Ok(result.Result);
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 		}
@@ -149,7 +153,8 @@ public class SettingsController : Controller
 				return result.GetResultForError();
 
 			return Ok(result.Result);
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 		}

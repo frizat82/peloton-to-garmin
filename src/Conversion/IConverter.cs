@@ -224,7 +224,7 @@ namespace Conversion
 
 			var unit = UnitHelpers.GetSpeedUnit(displayUnit);
 
-			switch(unit)
+			switch (unit)
 			{
 				case SpeedUnit.KilometersPerHour:
 				case SpeedUnit.MilesPerHour:
@@ -328,7 +328,7 @@ namespace Conversion
 			return speed;
 		}
 
-		protected byte? GetUserMaxHeartRate(WorkoutSamples workoutSamples) 
+		protected byte? GetUserMaxHeartRate(WorkoutSamples workoutSamples)
 		{
 			var maxZone = GetHeartRateZone(5, workoutSamples);
 
@@ -536,8 +536,8 @@ namespace Conversion
 
 				if (workout.Ftp_Info.Ftp_Source == CyclingFtpSource.Ftp_Manual_Source)
 					ftp = (ushort)Math.Round(ftp.GetValueOrDefault() * .95);
-			} 
-			
+			}
+
 			if ((ftp is null || ftp <= 0) && userData is object)
 			{
 				if (userData.Cycling_Ftp_Source == CyclingFtpSource.Ftp_Manual_Source)

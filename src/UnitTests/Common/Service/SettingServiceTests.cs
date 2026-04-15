@@ -1,8 +1,8 @@
 ﻿using Common;
 using Common.Database;
 using Common.Dto;
-using Common.Dto.Peloton;
 using Common.Dto.Garmin;
+using Common.Dto.Peloton;
 using Common.Service;
 using FluentAssertions;
 using Moq;
@@ -71,7 +71,8 @@ public class SettingServiceTests
 		if (deviceInfoSettings.TryGetValue(workoutType, out var expectedDeviceInfo))
 		{
 			chosenDeviceInfo.Should().Be(expectedDeviceInfo);
-		} else
+		}
+		else
 		{
 			chosenDeviceInfo.Should().Be(deviceInfoSettings[WorkoutType.None]);
 		}

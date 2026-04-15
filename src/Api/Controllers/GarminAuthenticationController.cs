@@ -51,7 +51,7 @@ namespace Api.Controllers
 			if (settings.Garmin.Email.CheckIsNullOrEmpty("Garmin Email", out result)) return BadRequest(result);
 
 			try
-			{ 
+			{
 				if (!settings.Garmin.TwoStepVerificationEnabled)
 				{
 					await _garminAuthService.SignInAsync();

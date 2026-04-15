@@ -1,5 +1,5 @@
-﻿using Common.Dto.Peloton;
-using Common.Dto;
+﻿using Common.Dto;
+using Common.Dto.Peloton;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -57,7 +57,7 @@ public static class P2GWorkoutExerciseMapper
 			foreach (var repData in trackedRepData)
 			{
 				MovementTargetType movementTargetType = MovementTargetType.Reps;
-				if (repData.Tracking_Type == TrackingTypes.TimeBased 
+				if (repData.Tracking_Type == TrackingTypes.TimeBased
 					|| repData.Tracking_Type == TrackingTypes.TimeTrackedRep
 					|| repData.Tracking_Type == TrackingTypes.Rounds)
 				{

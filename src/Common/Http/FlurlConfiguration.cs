@@ -1,19 +1,19 @@
-﻿using Flurl.Http;
+﻿using Common.Observe;
+using Common.Service;
+using Flurl;
+using Flurl.Http;
+using Polly;
 using Prometheus;
 using Serilog;
-using System;
-using System.Threading.Tasks;
-using PromMetrics = Prometheus.Metrics;
-using Metrics = Common.Observe.Metrics;
-using Flurl;
-using System.Linq;
-using System.Collections.Generic;
 using Serilog.Events;
-using System.Web;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
-using Polly;
-using Common.Observe;
-using Common.Service;
+using System.Threading.Tasks;
+using System.Web;
+using Metrics = Common.Observe.Metrics;
+using PromMetrics = Prometheus.Metrics;
 
 namespace Common.Http;
 
@@ -52,7 +52,8 @@ public static class FlurlConfiguration
 					var content = call.GetRawRequestBody().StripSensitiveData(settings.Peloton.Email, settings.Peloton.Password, pelotonAuth?.Token.AccessToken, settings.Garmin.Email, settings.Garmin.Password);
 					LogRequest(call, content);
 				}
-			} catch (Exception e)
+			}
+			catch (Exception e)
 			{
 				_logger.Error("Failed to write verbose http request logs.", e);
 			}
@@ -78,7 +79,7 @@ public static class FlurlConfiguration
 			TrackMetrics(call);
 		};
 
-		Func<FlurlCall, Task> onErrorAsync = async (call) => 
+		Func<FlurlCall, Task> onErrorAsync = async (call) =>
 		{
 			try
 			{
@@ -105,7 +106,7 @@ public static class FlurlConfiguration
 		});
 
 		FlurlHttp.ConfigureClientForUrl("https://api.onepeloton.com")
-			.AddMiddleware(() => 
+			.AddMiddleware(() =>
 			{
 				var policies = Policy.WrapAsync(PollyPolicies.Retry, PollyPolicies.NoOp);
 				return new PolicyHandler(policies);
@@ -261,7 +262,8 @@ public static class FlurlConfiguration
 				if (!string.IsNullOrEmpty(sensitiveField))
 					content = content?.Replace(sensitiveField, "<redacted>") ?? string.Empty;
 			}
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			_logger.Error("Failed to strip sensitive data from Http payload.", e);
 		}

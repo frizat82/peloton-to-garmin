@@ -27,7 +27,7 @@ namespace UnitTests.Garmin
 			_settingsServiceMock = new Mock<ISettingsService>();
 			_apiClientMock = new Mock<IGarminApiClient>();
 			_garminDbMock = new Mock<IGarminDb>();
-			
+
 			_authService = new GarminAuthenticationService(
 				_settingsServiceMock.Object,
 				_apiClientMock.Object,
@@ -197,16 +197,16 @@ namespace UnitTests.Garmin
 			// Mock the complex sign-in flow
 			var cookieJar = new CookieJar();
 			var csrfResult = new GarminResult { RawResponseBody = "<input name=\"_csrf\" value=\"csrf-token\" />" };
-			var credentialsResult = new SendCredentialsResult 
-			{ 
+			var credentialsResult = new SendCredentialsResult
+			{
 				RawResponseBody = "embed?ticket=test-ticket\"",
-				WasRedirected = false 
+				WasRedirected = false
 			};
 			var consumerCredentials = new ConsumerCredentials { Consumer_Key = "key", Consumer_Secret = "secret" };
 			var oAuth1Response = "oauth_token=token&oauth_token_secret=secret";
-			var oAuth2Token = new OAuth2Token 
-			{ 
-				Access_Token = "final-token", 
+			var oAuth2Token = new OAuth2Token
+			{
+				Access_Token = "final-token",
 				ExpiresAt = DateTime.Now.AddHours(1),
 				Expires_In = 3600
 			};
@@ -239,16 +239,16 @@ namespace UnitTests.Garmin
 			// SETUP
 			var cookieJar = new CookieJar();
 			var csrfResult = new GarminResult { RawResponseBody = "<input name=\"_csrf\" value=\"csrf-token\" />" };
-			var credentialsResult = new SendCredentialsResult 
-			{ 
+			var credentialsResult = new SendCredentialsResult
+			{
 				RawResponseBody = "embed?ticket=test-ticket\"",
-				WasRedirected = false 
+				WasRedirected = false
 			};
 			var consumerCredentials = new ConsumerCredentials { Consumer_Key = "key", Consumer_Secret = "secret" };
 			var oAuth1Response = "oauth_token=token&oauth_token_secret=secret";
-			var oAuth2Token = new OAuth2Token 
-			{ 
-				Access_Token = "access-token", 
+			var oAuth2Token = new OAuth2Token
+			{
+				Access_Token = "access-token",
 				ExpiresAt = DateTime.Now.AddHours(1),
 				Expires_In = 3600
 			};
@@ -354,9 +354,9 @@ namespace UnitTests.Garmin
 
 			var consumerCredentials = new ConsumerCredentials { Consumer_Key = "key", Consumer_Secret = "secret" };
 			var oAuth1Response = "oauth_token=token&oauth_token_secret=secret";
-			var oAuth2Token = new OAuth2Token 
-			{ 
-				Access_Token = "final-token", 
+			var oAuth2Token = new OAuth2Token
+			{
+				Access_Token = "final-token",
 				ExpiresAt = DateTime.Now.AddHours(1),
 				Expires_In = 3600
 			};
@@ -527,15 +527,15 @@ namespace UnitTests.Garmin
 			// Mock full sign-in flow for fallback
 			var cookieJar = new CookieJar();
 			var csrfResult = new GarminResult { RawResponseBody = "<input name=\"_csrf\" value=\"csrf-token\" />" };
-			var credentialsResult = new SendCredentialsResult 
-			{ 
+			var credentialsResult = new SendCredentialsResult
+			{
 				RawResponseBody = "embed?ticket=fallback-ticket\"",
-				WasRedirected = false 
+				WasRedirected = false
 			};
 			var oAuth1Response = "oauth_token=fallback-token&oauth_token_secret=fallback-secret";
-			var oAuth2Token = new OAuth2Token 
-			{ 
-				Access_Token = "fallback-oauth2-token", 
+			var oAuth2Token = new OAuth2Token
+			{
+				Access_Token = "fallback-oauth2-token",
 				ExpiresAt = DateTime.Now.AddHours(1),
 				Expires_In = 3600
 			};

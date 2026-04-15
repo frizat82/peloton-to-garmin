@@ -70,7 +70,7 @@ public static class UnitHelpers
 
 	public static WeightUnit GetWeightUnit(string unit)
 	{
-		switch(unit?.ToLower())
+		switch (unit?.ToLower())
 		{
 			case "lb": return WeightUnit.Pounds;
 			case "kg": return WeightUnit.Kilograms;

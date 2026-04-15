@@ -1,10 +1,10 @@
-﻿using NUnit.Framework;
-using Moq.AutoMock;
-using Conversion;
-using Common;
-using Common.Service;
-using FluentAssertions;
+﻿using Common;
 using Common.Dto;
+using Common.Service;
+using Conversion;
+using FluentAssertions;
+using Moq.AutoMock;
+using NUnit.Framework;
 
 namespace UnitTests.Conversion;
 

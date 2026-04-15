@@ -77,7 +77,7 @@ public class SettingsGarminPostRequest
 
 public class SettingsPelotonGetResponse
 {
-	public SettingsPelotonGetResponse() 
+	public SettingsPelotonGetResponse()
 	{
 		ExcludeWorkoutTypes = new List<WorkoutType>();
 	}
@@ -113,7 +113,7 @@ public static class Mapping
 
 	public static PelotonSettings Map(this SettingsPelotonPostRequest request)
 	{
-		return new ()
+		return new()
 		{
 			Email = request.Email,
 			Password = request.Password,
@@ -140,7 +140,7 @@ public static class Mapping
 
 	public static GarminSettings Map(this SettingsGarminPostRequest request)
 	{
-		return new ()
+		return new()
 		{
 			Email = request.Email,
 			Password = request.Password,

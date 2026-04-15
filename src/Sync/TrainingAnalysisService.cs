@@ -24,18 +24,18 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 	// TSS-per-hour estimates for non-power disciplines
 	private static readonly Dictionary<FitnessDiscipline, double> DisciplineIntensity = new()
 	{
-		[FitnessDiscipline.Circuit]          = 65,  // Tread Bootcamp — hard by nature
-		[FitnessDiscipline.Running]          = 55,
-		[FitnessDiscipline.Walking]          = 30,
-		[FitnessDiscipline.Cardio]           = 50,
-		[FitnessDiscipline.Bike_Bootcamp]    = 60,
-		[FitnessDiscipline.Strength]         = 40,
-		[FitnessDiscipline.Stretching]       = 10,
-		[FitnessDiscipline.Yoga]             = 15,
-		[FitnessDiscipline.Meditation]       = 5,
-		[FitnessDiscipline.Caesar]           = 55,  // Rowing
-		[FitnessDiscipline.Caesar_Bootcamp]  = 60,
-		[FitnessDiscipline.Cycling]          = 55,  // fallback if no FTP
+		[FitnessDiscipline.Circuit] = 65,  // Tread Bootcamp — hard by nature
+		[FitnessDiscipline.Running] = 55,
+		[FitnessDiscipline.Walking] = 30,
+		[FitnessDiscipline.Cardio] = 50,
+		[FitnessDiscipline.Bike_Bootcamp] = 60,
+		[FitnessDiscipline.Strength] = 40,
+		[FitnessDiscipline.Stretching] = 10,
+		[FitnessDiscipline.Yoga] = 15,
+		[FitnessDiscipline.Meditation] = 5,
+		[FitnessDiscipline.Caesar] = 55,  // Rowing
+		[FitnessDiscipline.Caesar_Bootcamp] = 60,
+		[FitnessDiscipline.Cycling] = 55,  // fallback if no FTP
 	};
 
 	private readonly IPelotonService _pelotonService;
@@ -320,13 +320,13 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		// Map intensity to target discipline and duration band
 		var (targetDiscipline, minDurationSec, maxDurationSec) = intensity switch
 		{
-			IntensityLevelDto.VeryHard  => (FitnessDiscipline.Circuit,    3000, 4200), // 50–70 min tread bootcamp
-			IntensityLevelDto.Hard      => (FitnessDiscipline.Circuit,    3000, 4200), // 50–70 min tread bootcamp
-			IntensityLevelDto.Moderate  => (FitnessDiscipline.Cycling,    2400, 3600), // 40–60 min ride
-			IntensityLevelDto.Easy      => (FitnessDiscipline.Cycling,    1500, 2700), // 25–45 min easy ride
-			IntensityLevelDto.Recovery  => (FitnessDiscipline.Cycling,    1500, 2700), // 25–45 min easy ride
-			IntensityLevelDto.Rest      => (FitnessDiscipline.Stretching, 300,  1800), // 5–30 min stretch
-			_                           => (FitnessDiscipline.Circuit,    3000, 4200),
+			IntensityLevelDto.VeryHard => (FitnessDiscipline.Circuit, 3000, 4200), // 50–70 min tread bootcamp
+			IntensityLevelDto.Hard => (FitnessDiscipline.Circuit, 3000, 4200), // 50–70 min tread bootcamp
+			IntensityLevelDto.Moderate => (FitnessDiscipline.Cycling, 2400, 3600), // 40–60 min ride
+			IntensityLevelDto.Easy => (FitnessDiscipline.Cycling, 1500, 2700), // 25–45 min easy ride
+			IntensityLevelDto.Recovery => (FitnessDiscipline.Cycling, 1500, 2700), // 25–45 min easy ride
+			IntensityLevelDto.Rest => (FitnessDiscipline.Stretching, 300, 1800), // 5–30 min stretch
+			_ => (FitnessDiscipline.Circuit, 3000, 4200),
 		};
 
 		try
@@ -373,45 +373,47 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 
 	private static string FriendlyDiscipline(FitnessDiscipline d) => d switch
 	{
-		FitnessDiscipline.Circuit          => "Tread Bootcamp",
-		FitnessDiscipline.Running          => "Tread",
-		FitnessDiscipline.Walking          => "Walk",
-		FitnessDiscipline.Cycling          => "Ride",
-		FitnessDiscipline.Bike_Bootcamp    => "Bike Bootcamp",
-		FitnessDiscipline.Strength         => "Strength",
-		FitnessDiscipline.Stretching       => "Stretch",
-		FitnessDiscipline.Yoga             => "Yoga",
-		FitnessDiscipline.Cardio           => "Cardio",
-		FitnessDiscipline.Caesar           => "Row",
-		FitnessDiscipline.Caesar_Bootcamp  => "Row Bootcamp",
-		FitnessDiscipline.Meditation       => "Meditation",
-		_                                  => d.ToString(),
+		FitnessDiscipline.Circuit => "Tread Bootcamp",
+		FitnessDiscipline.Running => "Tread",
+		FitnessDiscipline.Walking => "Walk",
+		FitnessDiscipline.Cycling => "Ride",
+		FitnessDiscipline.Bike_Bootcamp => "Bike Bootcamp",
+		FitnessDiscipline.Strength => "Strength",
+		FitnessDiscipline.Stretching => "Stretch",
+		FitnessDiscipline.Yoga => "Yoga",
+		FitnessDiscipline.Cardio => "Cardio",
+		FitnessDiscipline.Caesar => "Row",
+		FitnessDiscipline.Caesar_Bootcamp => "Row Bootcamp",
+		FitnessDiscipline.Meditation => "Meditation",
+		_ => d.ToString(),
 	};
 
 	private static string PelotonClassUrl(FitnessDiscipline discipline, string rideId)
 	{
 		var slug = discipline switch
 		{
-			FitnessDiscipline.Cycling         => "cycling",
-			FitnessDiscipline.Bike_Bootcamp   => "cycling",
-			FitnessDiscipline.Circuit         => "running",
-			FitnessDiscipline.Running         => "running",
-			FitnessDiscipline.Walking         => "running",
-			FitnessDiscipline.Strength        => "strength",
-			FitnessDiscipline.Stretching      => "stretching",
-			FitnessDiscipline.Yoga            => "yoga",
-			FitnessDiscipline.Meditation      => "meditation",
-			FitnessDiscipline.Caesar          => "rowing",
+			FitnessDiscipline.Cycling => "cycling",
+			FitnessDiscipline.Bike_Bootcamp => "cycling",
+			FitnessDiscipline.Circuit => "running",
+			FitnessDiscipline.Running => "running",
+			FitnessDiscipline.Walking => "running",
+			FitnessDiscipline.Strength => "strength",
+			FitnessDiscipline.Stretching => "stretching",
+			FitnessDiscipline.Yoga => "yoga",
+			FitnessDiscipline.Meditation => "meditation",
+			FitnessDiscipline.Caesar => "rowing",
 			FitnessDiscipline.Caesar_Bootcamp => "rowing",
-			FitnessDiscipline.Cardio          => "cardio",
-			_                                 => "classes",
+			FitnessDiscipline.Cardio => "cardio",
+			_ => "classes",
 		};
 		return $"https://members.onepeloton.com/classes/{slug}?modal=classDetailsModal&classId={rideId}";
 	}
 
 	private static TrainingStateGetResponse EmptyState() => new TrainingStateGetResponse
 	{
-		CTL = 0, ATL = 0, TSB = 0,
+		CTL = 0,
+		ATL = 0,
+		TSB = 0,
 		Recommendation = new WorkoutRecommendationDto
 		{
 			Intensity = IntensityLevelDto.Moderate,

@@ -21,7 +21,7 @@ namespace UnitTests.Common
 			var fileHandler = autoMocker.CreateInstance<IOWrapper>();
 
 			var success = fileHandler.TryDeserializeXml<GarminDeviceInfo>(DeviceInfoPath, out var deserialized);
-			
+
 			success.Should().BeTrue();
 			deserialized.Should().NotBeNull();
 		}

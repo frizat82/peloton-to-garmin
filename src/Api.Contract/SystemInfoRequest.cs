@@ -28,7 +28,7 @@ public record SystemInfoGetResponse
 		OutputDirectory = string.Empty;
 		TempDirectory = string.Empty;
 
-		LatestVersionInformation = new ();
+		LatestVersionInformation = new();
 	}
 
 	public string RunTimeVersion { get; set; }

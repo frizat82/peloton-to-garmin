@@ -1,5 +1,6 @@
 using Api.Contract;
 using Api.Controllers;
+using Common.Dto;
 using FluentAssertions;
 using Garmin;
 using Garmin.Database;
@@ -10,7 +11,6 @@ using Moq;
 using Moq.AutoMock;
 using NUnit.Framework;
 using Sync;
-using Common.Dto;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;

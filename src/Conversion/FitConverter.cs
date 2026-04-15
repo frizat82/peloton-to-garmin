@@ -18,7 +18,7 @@ namespace Conversion
 	public class FitConverter : Converter<Tuple<string, ICollection<Mesg>>>
 	{
 		private static readonly ILogger _logger = LogContext.ForClass<FitConverter>();
-		public FitConverter(ISettingsService settings, IFileHandling fileHandler) : base(settings, fileHandler) 
+		public FitConverter(ISettingsService settings, IFileHandling fileHandler) : base(settings, fileHandler)
 		{
 			Format = FileFormat.Fit;
 		}
@@ -108,7 +108,7 @@ namespace Conversion
 				zoneTargetMesg.SetFunctionalThresholdPower(GetCyclingFtp(workout, userData));
 				zoneTargetMesg.SetPwrCalcType(PwrZoneCalc.PercentFtp);
 			}
-			
+
 			var maxHr = GetUserMaxHeartRate(workoutSamples);
 			if (maxHr is object)
 			{
@@ -144,7 +144,8 @@ namespace Conversion
 				foreach (var set in sets)
 					messages.Add(set);
 
-			} else
+			}
+			else
 			{
 				var workoutSteps = new List<WorkoutStepMesg>();
 				var laps = new List<LapMesg>();
@@ -179,9 +180,9 @@ namespace Conversion
 				foreach (var lap in laps)
 					messages.Add(lap);
 
-				lapCount = laps.Count; 
+				lapCount = laps.Count;
 			}
-			
+
 			messages.Add(workoutMesg);
 
 			messages.Add(GetSessionMesg(workout, workoutSamples, userData, settings, sport, startTime, endTime, (ushort)lapCount));
@@ -245,7 +246,7 @@ namespace Conversion
 
 					if (hrMetrics is object && i < hrMetrics.Values.Length)
 						record.SetHeartRate((byte)hrMetrics.Values[i]);
-					
+
 					if (cadenceMetrics is object && i < cadenceMetrics.Values.Length)
 						record.SetCadence((byte)cadenceMetrics.Values[i]);
 
@@ -381,7 +382,8 @@ namespace Conversion
 				try
 				{
 					sessionMesg.SetTotalAscent((ushort)ConvertDistanceToMeters(totalElevation.Value.GetValueOrDefault(), totalElevation.Display_Unit));
-				} catch (Exception e)
+				}
+				catch (Exception e)
 				{
 					_logger.Warning($"Failed to cast elevation of {totalElevation?.Value} to ushort after converting to meters. Skipping data point.", e);
 				}
@@ -569,7 +571,7 @@ namespace Conversion
 				setMesg.SetMessageIndex(stepIndex);
 				setMesg.SetSetType(isRest ? SetType.Rest : SetType.Active);
 				setMesg.SetWktStepIndex(stepIndex);
-				
+
 				var reps = p2gExercise.Reps;
 				if (p2gExercise.Type == MovementTargetType.Time)
 				{
@@ -665,7 +667,7 @@ namespace Conversion
 						lapMesg.SetAvgCadence((byte)Math.Min(cadenceSumOverSeconds / segment.Length, 255));
 						lapMesg.SetMaxCadence((byte)Math.Min(maxCadence, 255));
 					}
-					
+
 					stepsAndLaps.Add(lapMesg);
 
 					stepIndex++;
@@ -684,7 +686,7 @@ namespace Conversion
 
 			if (workoutSamples is null)
 				return stepsAndLaps;
-			
+
 			var speedMetrics = GetSpeedSummary(workoutSamples);
 			if (speedMetrics is null)
 				return stepsAndLaps;
@@ -732,7 +734,7 @@ namespace Conversion
 				lapLengthSeconds++;
 
 				var currentSpeedInMPS = ConvertToMetersPerSecond(speedMetrics.GetValue(secondsSinceStart), speedMetrics.Display_Unit);
-				lapDistanceInMeters += 1* currentSpeedInMPS;
+				lapDistanceInMeters += 1 * currentSpeedInMPS;
 
 				if (cadenceMetrics is object && cadenceMetrics.Values.Length > secondsSinceStart)
 				{
@@ -772,7 +774,7 @@ namespace Conversion
 			deviceInfoMesg.SetSourceType(SourceType.Local);
 			deviceInfoMesg.SetProductName(deviceInfo.Name);
 
-			if(deviceInfo.Version.VersionMinor <=0)
+			if (deviceInfo.Version.VersionMinor <= 0)
 				deviceInfoMesg.SetSoftwareVersion(deviceInfo.Version.VersionMajor);
 			else
 			{

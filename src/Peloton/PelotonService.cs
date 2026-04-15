@@ -107,7 +107,7 @@ namespace Peloton
 			List<Workout> recentWorkouts = new List<Workout>();
 
 			if (numWorkoutsToDownload <= 0) return result;
-			
+
 			try
 			{
 				var page = 0;
@@ -173,7 +173,7 @@ namespace Peloton
 		{
 			using var tracing = Tracing.Trace($"{nameof(PelotonService)}.{nameof(GetWorkoutsSinceAsync)}")
 										.WithTag("workouts.sinceDt", sinceDt.ToString());
-			
+
 			var result = new ServiceResult<ICollection<Workout>>();
 
 			try
@@ -284,7 +284,8 @@ namespace Peloton
 				{
 					var workoutSegments = await _pelotonApi.GetClassSegmentsAsync(classId);
 					p2gWorkoutData.Exercises = P2GWorkoutExerciseMapper.GetWorkoutExercises(p2gWorkoutData.Workout, workoutSegments);
-				} catch (Exception ex)
+				}
+				catch (Exception ex)
 				{
 					// Known issue: Peloton Gym Segment data doesn't live at the same route as the other workout data
 					// have not yet been able to find where this data lives, may need to wait until Peloton adds a better

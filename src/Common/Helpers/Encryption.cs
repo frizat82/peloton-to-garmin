@@ -87,7 +87,8 @@ public static class Encryption
 			credentials.Password = credentials.Password.Encrypt();
 			credentials.EncryptionVersion = EncryptionVersion.V1;
 
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			Log.Error(e, "Failed to encrypt Email or Password.");
 
@@ -108,7 +109,8 @@ public static class Encryption
 			{
 				var decrypted = credentials.Email.Decrypt();
 				credentials.Email = decrypted;
-			} catch (Exception e)
+			}
+			catch (Exception e)
 			{
 				Log.Verbose(e, "Failed to decrypt Email, returning as is.");
 			}

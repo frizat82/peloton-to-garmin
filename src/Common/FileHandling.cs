@@ -121,7 +121,7 @@ public class IOWrapper : IFileHandling
 					return false;
 				}
 			}
-	}
+		}
 		catch (Exception e)
 		{
 			_logger.Error(e, "Failed to read {@file}.", file);
@@ -129,7 +129,7 @@ public class IOWrapper : IFileHandling
 			trace?.AddTag("exception.stacktrace", e.StackTrace);
 			return false;
 		}
-}
+	}
 
 	public void MoveFailedFile(string fromPath, string toPath)
 	{
@@ -169,7 +169,7 @@ public class IOWrapper : IFileHandling
 		{
 			File.WriteAllText(path, content);
 			return true;
-		} 
+		}
 		catch (Exception e)
 		{
 			_logger.Error(e, "Failed to write content to file {@Path}", path);

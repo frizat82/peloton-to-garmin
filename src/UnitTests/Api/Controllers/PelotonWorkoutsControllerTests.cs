@@ -20,7 +20,7 @@ namespace UnitTests.Api.Controllers
 	public class PelotonWorkoutsControllerTests
 	{
 		[Test]
-		public async Task GetAsync_WithInvalid_PageSize_Returns400([Values(-1, 0)]int pageSize)
+		public async Task GetAsync_WithInvalid_PageSize_Returns400([Values(-1, 0)] int pageSize)
 		{
 			var autoMocker = new AutoMocker();
 			var controller = autoMocker.CreateInstance<PelotonWorkoutsController>();
@@ -244,7 +244,7 @@ namespace UnitTests.Api.Controllers
 		}
 
 		[Test]
-		public async Task GetAllAsync_Honors_WorkoutStatusFilter_Flag([Values]WorkoutStatus filter)
+		public async Task GetAllAsync_Honors_WorkoutStatusFilter_Flag([Values] WorkoutStatus filter)
 		{
 			// setup
 			var autoMocker = new AutoMocker();
@@ -276,7 +276,8 @@ namespace UnitTests.Api.Controllers
 				response.Items.Count.Should().Be(2);
 				response.Items.Should().ContainSingle(w => w.Id == "1");
 				response.Items.Should().ContainSingle(w => w.Id == "4");
-			} else
+			}
+			else
 			{
 				response.Items.Count.Should().Be(5);
 				response.Items.Should().ContainSingle(w => w.Id == "1");

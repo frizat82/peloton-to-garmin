@@ -98,14 +98,14 @@
 			if (PelotonSettingNotConfiguredYet)
 			{
 				TodaysWorkoutsAreLoading = false;
-			} 
-			else 
+			}
+			else
 			{
 				var getTodaysWorkoutsTask = LoadTodaysWorkoutsAsync();
 				TodaysWorkouts = await getTodaysWorkoutsTask;
 				TodaysWorkoutsAreLoading = false;
 			}
-			
+
 			var getSyncStatusAsync = LoadSyncStatusAsync();
 			if (settings.App.CheckForUpdates)
 			{

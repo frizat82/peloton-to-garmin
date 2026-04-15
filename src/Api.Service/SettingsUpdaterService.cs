@@ -113,7 +113,7 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 			return result;
 		}
 
-		if (!string.IsNullOrWhiteSpace(updatedPelotonSettings.Password) 
+		if (!string.IsNullOrWhiteSpace(updatedPelotonSettings.Password)
 			&& updatedPelotonSettings.Password.Contains('\\'))
 		{
 			result.Successful = false;

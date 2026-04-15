@@ -23,7 +23,7 @@
 	<ItemGroup>
 	  <None Include="wwwroot\favicon.ico" />
 	</ItemGroup>
-	
+
 	<ItemGroup>
 	  <Folder Include="wwwroot\lib\bootstrap\scss\" />
 	</ItemGroup>

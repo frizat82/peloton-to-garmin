@@ -21,7 +21,7 @@ namespace UnitTests.PelotonTests
 			var autoMocker = new AutoMocker();
 			var apiClient = autoMocker.CreateInstance<ApiClient>();
 			autoMocker.GetMock<IPelotonAuthApiClient>().Setup(x => x.Authenticate())
-			.ReturnsAsync(new PelotonApiAuthentication() { Token = new () });
+			.ReturnsAsync(new PelotonApiAuthentication() { Token = new() });
 
 			var responseData = await FileHelper.ReadTextFromFileAsync(Path.Join(DataDirectory, "rower_sample.json"));
 
@@ -42,7 +42,7 @@ namespace UnitTests.PelotonTests
 			var autoMocker = new AutoMocker();
 			var apiClient = autoMocker.CreateInstance<ApiClient>();
 			autoMocker.GetMock<IPelotonAuthApiClient>().Setup(x => x.Authenticate())
-			.ReturnsAsync(new PelotonApiAuthentication() { Token = new () });
+			.ReturnsAsync(new PelotonApiAuthentication() { Token = new() });
 
 			var responseData = await FileHelper.ReadTextFromFileAsync(Path.Join(DataDirectory, "rower_performance_graph.json"));
 

@@ -1,8 +1,8 @@
 ﻿using Api.Contract;
-using Api.Services;
 using Api.Service.Helpers;
-using Microsoft.AspNetCore.Mvc;
+using Api.Services;
 using Common.Observe;
+using Microsoft.AspNetCore.Mvc;
 
 namespace WebApp.Controllers
 {
@@ -14,7 +14,7 @@ namespace WebApp.Controllers
 	{
 		private readonly ISystemInfoService _systemInfoService;
 
-		public SystemInfoController(ISystemInfoService systemInforService) 
+		public SystemInfoController(ISystemInfoService systemInforService)
 		{
 			_systemInfoService = systemInforService;
 		}
@@ -25,7 +25,7 @@ namespace WebApp.Controllers
 		/// <response code="200">Returns the system information</response>
 		[HttpGet]
 		[ProducesResponseType(StatusCodes.Status200OK)]
-		public async Task<ActionResult<SystemInfoGetResponse>> GetAsync([FromQuery]SystemInfoGetRequest request)
+		public async Task<ActionResult<SystemInfoGetResponse>> GetAsync([FromQuery] SystemInfoGetRequest request)
 		{
 			var result = await _systemInfoService.GetAsync(request, this.Request.Scheme, this.Request.Host.ToString());
 			return Ok(result);
@@ -46,7 +46,8 @@ namespace WebApp.Controllers
 
 				return Ok(result.Result);
 
-			} catch (Exception e)
+			}
+			catch (Exception e)
 			{
 				return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 			}

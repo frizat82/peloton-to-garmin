@@ -123,11 +123,11 @@ public class DbMigrations : IDbMigrations
 			{
 				settings.Format.DeviceInfoSettings.Clear();
 				settings.Format.DeviceInfoSettings.Add(WorkoutType.None, deviceInfo);
-				
+
 				legacyDeviceInfoSettings.DeviceInfoPath = null;
 
 				await _settingsDb.UpsertSettingsAsync(admin.Id, settings);
-			} 
+			}
 			else
 			{
 				_logger.Warning($"[MIGRATION] Failed to parse {legacyDeviceInfoSettings.DeviceInfoPath}, migrating to P2G default device settings instead.");
@@ -137,7 +137,7 @@ public class DbMigrations : IDbMigrations
 					{ WorkoutType.Cycling, GarminDevices.TACXDevice },
 					{ WorkoutType.Rowing, GarminDevices.EpixDevice },
 				};
-				
+
 				legacyDeviceInfoSettings.DeviceInfoPath = null;
 
 				await _settingsDb.UpsertSettingsAsync(admin.Id, settings);
@@ -145,7 +145,8 @@ public class DbMigrations : IDbMigrations
 
 			_logger.Information($"[MIGRATION] Successfully migrated {legacyDeviceInfoSettings.DeviceInfoPath} to new settings format.");
 
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			_logger.Error(e, $"[MIGRATION] Failed to migrated {legacyDeviceInfoSettings.DeviceInfoPath} to new settings format.");
 		}

@@ -5,7 +5,7 @@ namespace Conversion;
 
 public static class ExerciseMapping
 {
-	public static IReadOnlyCollection<string> IgnoredPelotonExercises = new HashSet<string>() 
+	public static IReadOnlyCollection<string> IgnoredPelotonExercises = new HashSet<string>()
 	{
 		// A
 		/* Active Recovery */ "b067c9f7a1e4412190b0f8eb3c6128e3",
@@ -24,7 +24,7 @@ public static class ExerciseMapping
 	public static readonly Dictionary<string, GarminExercise> StrengthExerciseMappings = new()
 	{
 		// A
-		/* Arnold Press */ { "01251235527748368069f9dc898aadf3", new (ExerciseCategory.ShoulderPress, ShoulderPressExerciseName.ArnoldPress) }, 
+		/* Arnold Press */ { "01251235527748368069f9dc898aadf3", new (ExerciseCategory.ShoulderPress, ShoulderPressExerciseName.ArnoldPress) },
 		/* Arm Circles */ { "1b3400e0aade45e58d2f42cf19af0f40", new (ExerciseCategory.WarmUp, WarmUpExerciseName.ArmCircles) },
 
 		// B

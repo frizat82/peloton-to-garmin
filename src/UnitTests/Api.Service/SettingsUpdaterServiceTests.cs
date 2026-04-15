@@ -98,10 +98,10 @@ public class SettingsUpdaterServiceTests
 
 		settingService
 			.SetupWithAny<ISettingsService, Task<Settings>>(nameof(settingService.Object.GetSettingsAsync))
-			.ReturnsAsync(new Settings() 
-			{ 
+			.ReturnsAsync(new Settings()
+			{
 				App = new() { EnablePolling = true },
-				Garmin = new () { Email = "ogEmail", Password = "ogPassword" }
+				Garmin = new() { Email = "ogEmail", Password = "ogPassword" }
 			});
 
 		SettingsGarminPostRequest request = new()

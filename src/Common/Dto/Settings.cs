@@ -14,10 +14,10 @@ public class Settings
 {
 	public Settings()
 	{
-		App = new ();
-		Format = new ();
-		Peloton = new ();
-		Garmin = new ();
+		App = new();
+		Format = new();
+		Peloton = new();
+		Garmin = new();
 	}
 
 	public App App { get; set; }
@@ -156,13 +156,13 @@ public class PelotonApiSettings
 {
 	public string ApiUrl { get; set; } = "https://api.onepeloton.com/";
 	public string AuthDomain { get; set; } = "auth.onepeloton.com";
-    public string AuthClientId { get; set; } =  "WVoJxVDdPoFx4RNewvvg6ch2mZ7bwnsM";
-    public string AuthAudience { get; set; } = "https://api.onepeloton.com/";
-    public string AuthScope { get; set; } = "offline_access openid peloton-api.members:default";
-    public string AuthRedirectUri { get; set; } = "https://members.onepeloton.com/callback";
-    public string Auth0ClientPayload { get; set; } = "eyJuYW1lIjoiYXV0aDAuanMtdWxwIiwidmVyc2lvbiI6IjkuMTQuMyJ9";
-    public string AuthAuthorizePath { get; set; } = "/authorize";
-    public string AuthTokenPath { get; set; } = "/oauth/token";
+	public string AuthClientId { get; set; } = "WVoJxVDdPoFx4RNewvvg6ch2mZ7bwnsM";
+	public string AuthAudience { get; set; } = "https://api.onepeloton.com/";
+	public string AuthScope { get; set; } = "offline_access openid peloton-api.members:default";
+	public string AuthRedirectUri { get; set; } = "https://members.onepeloton.com/callback";
+	public string Auth0ClientPayload { get; set; } = "eyJuYW1lIjoiYXV0aDAuanMtdWxwIiwidmVyc2lvbiI6IjkuMTQuMyJ9";
+	public string AuthAuthorizePath { get; set; } = "/authorize";
+	public string AuthTokenPath { get; set; } = "/oauth/token";
 	public int BearerTokenDefaultTtlSeconds { get; set; } = 172800;
 }
 
@@ -177,7 +177,7 @@ public class GarminSettings : ICredentials
 	public bool EnrichGarminActivities { get; set; } = false;
 	public bool MergeFitWithWatch { get; set; } = false;
 	public int ActivityMatchWindowSeconds { get; set; } = 900;
-	public GarminApiSettings Api {  get; set; } = new GarminApiSettings();
+	public GarminApiSettings Api { get; set; } = new GarminApiSettings();
 }
 
 public class GarminApiSettings

@@ -1,13 +1,13 @@
-﻿using NUnit.Framework;
-using Sync;
-using System.Collections.Generic;
+﻿using Bogus;
 using Common.Dto;
-using FluentAssertions;
-using Bogus;
-using System.Linq;
 using Common.Dto.Peloton;
+using FluentAssertions;
 using FluentAssertions.Common;
+using NUnit.Framework;
+using Sync;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace UnitTests.Sync;
 
@@ -19,7 +19,7 @@ public class StackedWorkoutsCalculatorTests
 
 	private readonly Faker<Workout> _workoutFaker = new Faker<Workout>().UseSeed(100).UseDateTimeReference(DateTime.Parse("1/1/1980"));
 	private readonly Faker<P2GWorkout> _p2gWorkoutFaker = new Faker<P2GWorkout>().UseSeed(300).UseDateTimeReference(DateTime.Parse("1/1/1980"));
-	
+
 	[OneTimeSetUp]
 	public void SetUp()
 	{
@@ -85,7 +85,7 @@ public class StackedWorkoutsCalculatorTests
 
 		// ASSERT
 		result.Should().NotBeNullOrEmpty();
-		
+
 		result.Keys.Count.Should().Be(1);
 		result.Keys.First().Should().Be(0);
 
@@ -139,7 +139,7 @@ public class StackedWorkoutsCalculatorTests
 			var count = 0;
 			var current = FitnessDiscipline.Cycling;
 			f.RuleFor(w => w.Fitness_Discipline, f => current)
-			.FinishWith((f,w) => 
+			.FinishWith((f, w) =>
 			{
 				if (count == 5)
 				{
@@ -170,10 +170,11 @@ public class StackedWorkoutsCalculatorTests
 
 		if (secondsGap >= 300)
 		{
-			result.Keys.Count.Should().Be(2, 
-				because: "{0} Workouts, grouped by type should be five per type.", 
+			result.Keys.Count.Should().Be(2,
+				because: "{0} Workouts, grouped by type should be five per type.",
 				becauseArgs: workouts.Count);
-		} else
+		}
+		else
 		{
 			result.Keys.Count.Should().Be(workouts.Count,
 				because: "{0} Workouts, none falling within the 5min time gap range should yield distinct groups.",
@@ -210,7 +211,7 @@ public class StackedWorkoutsCalculatorTests
 	{
 		// NULL
 		// SETUP
-		_p2gWorkoutFaker.RuleSet($"{nameof(CombineLocationData_When_WorkoutSamples_Is_Null_SkipsEmpty)}", (f) => 
+		_p2gWorkoutFaker.RuleSet($"{nameof(CombineLocationData_When_WorkoutSamples_Is_Null_SkipsEmpty)}", (f) =>
 		{
 			f.RuleFor(f => f.WorkoutSamples, f => null);
 		});
@@ -265,7 +266,7 @@ public class StackedWorkoutsCalculatorTests
 		// SETUP
 		_p2gWorkoutFaker.RuleSet($"{nameof(CombineLocationData_When_Coordinates_Is_NullOrEmpty_SkipsEmpty)}_Null", (f) =>
 		{
-			f.RuleFor(f => f.WorkoutSamples, f => new WorkoutSamples() 
+			f.RuleFor(f => f.WorkoutSamples, f => new WorkoutSamples()
 			{
 				Location_Data = new List<LocationData>()
 				{
@@ -347,7 +348,7 @@ public class StackedWorkoutsCalculatorTests
 			c.Longitude = initialLongitude;
 			c.Seconds_Offset_From_Start = initialSeconds;
 		})
-		.FinishWith((f,c) => 
+		.FinishWith((f, c) =>
 		{
 			initialLatitude++;
 			initialLongitude++;
@@ -364,7 +365,7 @@ public class StackedWorkoutsCalculatorTests
 				},
 				Duration = 10 // 10 total seconds
 			})
-			.FinishWith((f,w) => 
+			.FinishWith((f, w) =>
 			{
 				initialSeconds = 0;
 			});

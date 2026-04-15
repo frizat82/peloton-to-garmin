@@ -96,7 +96,8 @@ namespace Garmin
 					_logger.Information("Uploading to Garmin: {@file}", file);
 					await _api.UploadActivity(file, settings.Format.Fit ? ".fit" : ".tcx", auth);
 					await RateLimit();
-				} catch (Exception e)
+				}
+				catch (Exception e)
 				{
 					throw new GarminUploadException($"NativeImplV1 failed to upload workout {file}, {e.Message}", -1, e);
 				}

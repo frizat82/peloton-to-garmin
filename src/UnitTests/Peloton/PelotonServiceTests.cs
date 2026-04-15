@@ -16,7 +16,7 @@ namespace UnitTests.PelotonTests
 	public class PelotonServiceTests
 	{
 		[Test]
-		public async Task GetRecentWorkoutsAsync_DoesNothing_WhenNoCount([Values(-1,0)]int numWorkoutsToDownload)
+		public async Task GetRecentWorkoutsAsync_DoesNothing_WhenNoCount([Values(-1, 0)] int numWorkoutsToDownload)
 		{
 			var autoMocker = new AutoMocker();
 			var pelotonService = autoMocker.CreateInstance<PelotonService>();

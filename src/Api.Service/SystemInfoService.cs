@@ -83,7 +83,7 @@ public class SystemInfoService : ISystemInfoService
 		var text = string.Empty;
 		try
 		{
-			using (var sr = new StreamReader(Logging.CurrentFilePath, new FileStreamOptions () { Access = FileAccess.Read, Share = FileShare.ReadWrite }))
+			using (var sr = new StreamReader(Logging.CurrentFilePath, new FileStreamOptions() { Access = FileAccess.Read, Share = FileShare.ReadWrite }))
 			{
 				text = await sr.ReadToEndAsync();
 

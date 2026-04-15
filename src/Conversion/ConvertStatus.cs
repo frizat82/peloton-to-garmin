@@ -10,6 +10,6 @@
 	{
 		Success = 0,
 		Skipped = 10,
-		Failed = 20,	
+		Failed = 20,
 	}
 }

@@ -25,7 +25,7 @@ namespace UnitTests.Garmin
 			_settingsServiceMock = new Mock<ISettingsService>();
 			_apiClientMock = new Mock<IGarminApiClient>();
 			_authServiceMock = new Mock<IGarminAuthenticationService>();
-			
+
 			_uploader = new GarminUploader(_settingsServiceMock.Object, _apiClientMock.Object, _authServiceMock.Object);
 		}
 
@@ -57,7 +57,7 @@ namespace UnitTests.Garmin
 				Garmin = new GarminSettings { Upload = true },
 				App = new App()
 			};
-			
+
 			_settingsServiceMock.Setup(s => s.GetSettingsAsync()).ReturnsAsync(settings);
 
 			// ACT
@@ -88,11 +88,11 @@ namespace UnitTests.Garmin
 			// SETUP
 			var config = new Settings
 			{
-				Garmin = new GarminSettings 
-				{ 
-					Upload = true, 
-					Email = "test@example.com", 
-					Password = "password" 
+				Garmin = new GarminSettings
+				{
+					Upload = true,
+					Email = "test@example.com",
+					Password = "password"
 				}
 			};
 

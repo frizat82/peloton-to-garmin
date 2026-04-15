@@ -32,7 +32,7 @@ namespace Api.Controllers
 		[ProducesResponseType(StatusCodes.Status200OK)]
 		[ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
 		[ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
-		public async Task<ActionResult<PelotonWorkoutsGetResponse>> GetAsync([FromQuery]PelotonWorkoutsGetRequest request)
+		public async Task<ActionResult<PelotonWorkoutsGetResponse>> GetAsync([FromQuery] PelotonWorkoutsGetRequest request)
 		{
 			if (!request.IsValid(out var result))
 				return new BadRequestObjectResult(result);
@@ -42,21 +42,22 @@ namespace Api.Controllers
 			try
 			{
 				recentWorkouts = await _pelotonService.GetPelotonWorkoutsAsync(request.PageSize, request.PageIndex);
-			} 
-			catch (ArgumentException ae) 
+			}
+			catch (ArgumentException ae)
 			{
 				return BadRequest(new ErrorResponse(ae.Message));
 			}
-			catch (PelotonAuthenticationError pe) 
+			catch (PelotonAuthenticationError pe)
 			{
 				return BadRequest(new ErrorResponse(pe.Message));
-			} catch (Exception e)
+			}
+			catch (Exception e)
 			{
 				return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 			}
 
-			return new PelotonWorkoutsGetResponse() 
-			{ 
+			return new PelotonWorkoutsGetResponse()
+			{
 				PageSize = recentWorkouts.Limit,
 				PageIndex = recentWorkouts.Page,
 				PageCount = recentWorkouts.Page_Count,
@@ -64,7 +65,7 @@ namespace Api.Controllers
 				Items = recentWorkouts.data
 						.OrderByDescending(i => i.Created_At)
 						.Select(w => new PelotonWorkout(w))
-						.ToList() 
+						.ToList()
 			};
 		}
 

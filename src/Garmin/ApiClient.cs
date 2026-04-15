@@ -130,7 +130,7 @@ namespace Garmin
 
 			OAuthRequest oauthClient2 = OAuthRequest.ForProtectedResource("POST", credentials.Consumer_Key, credentials.Consumer_Secret, oAuth1Token.Token, oAuth1Token.TokenSecret);
 			oauthClient2.RequestUrl = setttings.Garmin.Api.OAuth2RequestUrl;
-			
+
 			return await oauthClient2.RequestUrl
 								.WithHeader("User-Agent", setttings.Garmin.Api.SsoUserAgent)
 								.WithHeader("Authorization", oauthClient2.GetAuthorizationHeader())

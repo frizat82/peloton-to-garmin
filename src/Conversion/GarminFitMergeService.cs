@@ -80,9 +80,9 @@ public static class GarminFitMergeService
 			return map;
 
 		var allMetrics = samples.Metrics ?? new List<Metric>();
-		var outputMetrics    = allMetrics.FirstOrDefault(m => m.Slug == "output");
-		var cadenceMetrics   = GetCadenceSummary(samples);
-		var speedMetrics     = GetSpeedSummary(samples);
+		var outputMetrics = allMetrics.FirstOrDefault(m => m.Slug == "output");
+		var cadenceMetrics = GetCadenceSummary(samples);
+		var speedMetrics = GetSpeedSummary(samples);
 		var resistanceMetrics = allMetrics.FirstOrDefault(m => m.Slug == "resistance");
 
 		var secondsList = samples.Seconds_Since_Pedaling_Start.ToList();

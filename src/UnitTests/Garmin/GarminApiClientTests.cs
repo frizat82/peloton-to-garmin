@@ -1,3 +1,4 @@
+using Common.Dto;
 using Common.Service;
 using FluentAssertions;
 using Flurl.Http;
@@ -13,7 +14,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Common.Dto;
 
 namespace UnitTests.Garmin
 {
@@ -81,7 +81,7 @@ namespace UnitTests.Garmin
 			result.Should().NotBeNull();
 			result.Consumer_Key.Should().Be("test-consumer-key");
 			result.Consumer_Secret.Should().Be("test-consumer-secret");
-			
+
 			_httpTest.ShouldHaveCalled("https://thegarth.s3.amazonaws.com/oauth_consumer.json")
 				.WithVerb(HttpMethod.Get)
 				.Times(1);
@@ -109,7 +109,7 @@ namespace UnitTests.Garmin
 
 			// ASSERT
 			result.Should().NotBeNull();
-			
+
 			_httpTest.ShouldHaveCalled(_settings.Garmin.Api.SsoEmbedUrl)
 				.WithVerb(HttpMethod.Get)
 				.WithQueryParam("param1", "value1")
@@ -150,7 +150,7 @@ namespace UnitTests.Garmin
 			result.Should().NotBeNull();
 			result.RawResponseBody.Should().Be(expectedResponse);
 			result.WasRedirected.Should().BeFalse();
-			
+
 			_httpTest.ShouldHaveCalled(_settings.Garmin.Api.SsoSignInUrl)
 				.WithVerb(HttpMethod.Post)
 				.WithQueryParam("service", "test")
@@ -190,7 +190,7 @@ namespace UnitTests.Garmin
 			_httpTest.RespondWith("Unauthorized", 401);
 
 			// ACT & ASSERT
-			Assert.ThrowsAsync<FlurlHttpException>(() => 
+			Assert.ThrowsAsync<FlurlHttpException>(() =>
 				_apiClient.SendCredentialsAsync("test@example.com", "password", new { }, new { }, jar));
 		}
 
@@ -210,7 +210,7 @@ namespace UnitTests.Garmin
 			// ASSERT
 			result.Should().NotBeNull();
 			result.RawResponseBody.Should().Be(expectedResponse);
-			
+
 			_httpTest.ShouldHaveCalled(_settings.Garmin.Api.SsoSignInUrl)
 				.WithVerb(HttpMethod.Get)
 				.WithQueryParam("service", "test")
@@ -227,7 +227,7 @@ namespace UnitTests.Garmin
 			_httpTest.RespondWith("Server Error", 500);
 
 			// ACT & ASSERT
-			Assert.ThrowsAsync<FlurlHttpException>(() => 
+			Assert.ThrowsAsync<FlurlHttpException>(() =>
 				_apiClient.GetCsrfTokenAsync(new { }, jar));
 		}
 
@@ -247,7 +247,7 @@ namespace UnitTests.Garmin
 
 			// ASSERT
 			result.Should().Be(expectedResponse);
-			
+
 			_httpTest.ShouldHaveCalled(_settings.Garmin.Api.SsoMfaCodeUrl)
 				.WithVerb(HttpMethod.Post)
 				.WithQueryParam("service", "test")
@@ -264,7 +264,7 @@ namespace UnitTests.Garmin
 			_httpTest.RespondWith("Invalid MFA Code", 400);
 
 			// ACT & ASSERT
-			Assert.ThrowsAsync<FlurlHttpException>(() => 
+			Assert.ThrowsAsync<FlurlHttpException>(() =>
 				_apiClient.SendMfaCodeAsync(new { }, new { mfaCode = "000000" }, jar));
 		}
 
@@ -287,7 +287,7 @@ namespace UnitTests.Garmin
 
 			// ASSERT
 			result.Should().Be(expectedResponse);
-			
+
 			_httpTest.ShouldHaveMadeACall()
 				.WithVerb(HttpMethod.Get)
 				.WithHeader("User-Agent", _settings.Garmin.Api.SsoUserAgent)
@@ -307,7 +307,7 @@ namespace UnitTests.Garmin
 			_httpTest.RespondWith("Network Error", 503);
 
 			// ACT & ASSERT
-			Assert.ThrowsAsync<FlurlHttpException>(() => 
+			Assert.ThrowsAsync<FlurlHttpException>(() =>
 				_apiClient.GetOAuth1TokenAsync(credentials, "test-ticket"));
 		}
 
@@ -345,7 +345,7 @@ namespace UnitTests.Garmin
 			result.Token_Type.Should().Be("Bearer");
 			result.Expires_In.Should().Be(3600);
 			result.Refresh_Token.Should().Be("refresh-token-123");
-			
+
 			_httpTest.ShouldHaveCalled(_settings.Garmin.Api.OAuth2RequestUrl)
 				.WithVerb(HttpMethod.Post)
 				.WithHeader("User-Agent", _settings.Garmin.Api.SsoUserAgent)
@@ -372,7 +372,7 @@ namespace UnitTests.Garmin
 			_httpTest.RespondWith("Unauthorized", 401);
 
 			// ACT & ASSERT
-			Assert.ThrowsAsync<FlurlHttpException>(() => 
+			Assert.ThrowsAsync<FlurlHttpException>(() =>
 				_apiClient.GetOAuth2TokenAsync(oAuth1Token, credentials));
 		}
 
@@ -382,7 +382,7 @@ namespace UnitTests.Garmin
 			// SETUP
 			var tempFile = Path.GetTempFileName();
 			File.WriteAllText(tempFile, "test activity data");
-			
+
 			var format = ".fit";
 			var auth = new GarminApiAuthentication
 			{
@@ -416,7 +416,7 @@ namespace UnitTests.Garmin
 				result.Should().NotBeNull();
 				result.DetailedImportResult.Should().NotBeNull();
 				result.DetailedImportResult.FileName.Should().Be("test.fit");
-				
+
 				_httpTest.ShouldHaveMadeACall()
 					.WithVerb(HttpMethod.Post)
 					.WithHeader("Authorization", "Bearer valid-access-token")
@@ -448,7 +448,7 @@ namespace UnitTests.Garmin
 
 			// ACT & ASSERT
 			// The actual implementation throws NullReferenceException when file doesn't exist
-			Assert.ThrowsAsync<NullReferenceException>(() => 
+			Assert.ThrowsAsync<NullReferenceException>(() =>
 				_apiClient.UploadActivity(nonExistentFile, ".fit", auth));
 		}
 
@@ -458,7 +458,7 @@ namespace UnitTests.Garmin
 			// SETUP
 			var tempFile = Path.GetTempFileName();
 			File.WriteAllText(tempFile, "test activity data");
-			
+
 			var auth = new GarminApiAuthentication
 			{
 				OAuth2Token = new OAuth2Token
@@ -472,7 +472,7 @@ namespace UnitTests.Garmin
 			try
 			{
 				// ACT & ASSERT
-				Assert.ThrowsAsync<FlurlHttpException>(() => 
+				Assert.ThrowsAsync<FlurlHttpException>(() =>
 					_apiClient.UploadActivity(tempFile, ".fit", auth));
 			}
 			finally
@@ -489,7 +489,7 @@ namespace UnitTests.Garmin
 			// SETUP
 			var tempFile = Path.GetTempFileName();
 			File.WriteAllText(tempFile, "test activity data");
-			
+
 			var auth = new GarminApiAuthentication
 			{
 				OAuth2Token = new OAuth2Token

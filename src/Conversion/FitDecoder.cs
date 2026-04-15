@@ -87,7 +87,7 @@ namespace Conversion
 			mesgBroadcaster.SegmentLeaderboardEntryMesgEvent += Write;
 			mesgBroadcaster.SegmentPointMesgEvent += Write;
 			mesgBroadcaster.SessionMesgEvent += Write;
-			mesgBroadcaster.SetMesgEvent+= Write;
+			mesgBroadcaster.SetMesgEvent += Write;
 			mesgBroadcaster.SlaveDeviceMesgEvent += Write;
 			mesgBroadcaster.SoftwareMesgEvent += Write;
 			mesgBroadcaster.SpeedZoneMesgEvent += Write;
@@ -119,7 +119,7 @@ namespace Conversion
 		private static void Write(object sender, MesgEventArgs e)
 		{
 			_logger.Verbose($"{e.mesg.Name}::");
-			foreach(var f in e.mesg.Fields)
+			foreach (var f in e.mesg.Fields)
 			{
 				_logger.Verbose($"{f.GetName()}::{f.GetValue()}");
 			}
@@ -128,7 +128,7 @@ namespace Conversion
 			{
 				var dev = (DeveloperDataIdMesg)e.mesg;
 				_logger.Verbose($"FOUND DEV FIELD - {dev.Name} {dev.Num}");
-				foreach(DeveloperField devField in dev.DeveloperFields)
+				foreach (DeveloperField devField in dev.DeveloperFields)
 				{
 					var name = devField.Name;
 					var value = devField.GetValue();
@@ -137,7 +137,7 @@ namespace Conversion
 					_logger.Verbose($"DevFields: {name} {value} {units} isResistance:{isResistance}");
 				}
 
-				foreach(Field devField in dev.Fields)
+				foreach (Field devField in dev.Fields)
 				{
 					var name = devField.Name;
 					var value = devField.GetValue();

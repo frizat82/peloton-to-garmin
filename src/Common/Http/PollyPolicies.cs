@@ -1,10 +1,10 @@
-﻿using Polly;
+﻿using Flurl.Http;
+using Polly;
+using Polly.NoOp;
 using Polly.Retry;
+using Serilog;
 using System;
 using System.Net.Http;
-using Flurl.Http;
-using Serilog;
-using Polly.NoOp;
 
 namespace Common.Http;
 

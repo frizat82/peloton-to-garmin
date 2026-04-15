@@ -81,8 +81,8 @@ public record SyncRecentPostRequest
 {
 	/// <summary>
 	/// Syncs the most recent NumberToSync workouts.
-	/// 
-	/// Mutually exclusive with 
+	///
+	/// Mutually exclusive with
 	/// - NumWorkouts
 	/// - SinceDate
 	/// </summary>

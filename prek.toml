@@ -1,0 +1,33 @@
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
+id = "check-json"
+exclude = "^src/UnitTests/Data/"
+
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos.hooks]]
+id = "detect-private-key"
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "dotnet-format"
+name = "dotnet format"
+entry = "dotnet"
+args = ["format", "--verify-no-changes", "--verbosity", "quiet"]
+language = "system"
+types = ["c#"]
+pass_filenames = false

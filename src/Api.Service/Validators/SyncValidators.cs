@@ -66,7 +66,7 @@ public static class SyncValidators
 			}
 		}
 
-		if (request.NumberToSync.CheckIsLessThanOrEqualTo(0 ,nameof(request.NumberToSync), out error!))
+		if (request.NumberToSync.CheckIsLessThanOrEqualTo(0, nameof(request.NumberToSync), out error!))
 			return (false, new BadRequestObjectResult(error));
 
 		return (true, result);

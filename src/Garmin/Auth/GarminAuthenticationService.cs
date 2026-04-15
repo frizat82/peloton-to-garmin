@@ -78,7 +78,8 @@ public class GarminAuthenticationService : IGarminAuthenticationService
 
 				return await ExchangeOAuth1ForOAuth2Async(oAuth1Token, consumerCredentials);
 
-			} catch (Exception ex)
+			}
+			catch (Exception ex)
 			{
 				_logger.Debug("Failed to exchange OAuth1 token for OAuth 2, will try refreshing OAuth1 token.", ex);
 			}
@@ -298,7 +299,8 @@ public class GarminAuthenticationService : IGarminAuthenticationService
 				throw new GarminAuthenticationError("Found csrfToken but its null.") { Code = failureStepCode };
 
 			return csrfToken;
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			throw new GarminAuthenticationError("Failed to parse csrf token.", e) { Code = failureStepCode };
 		}
@@ -310,7 +312,8 @@ public class GarminAuthenticationService : IGarminAuthenticationService
 		try
 		{
 			oauth1Response = await _apiClient.GetOAuth1TokenAsync(credentials, ticket);
-		} catch (Exception e)
+		}
+		catch (Exception e)
 		{
 			throw new GarminAuthenticationError("Auth appeared successful but failed to get the OAuth1 token.", e) { Code = Code.AuthAppearedSuccessful };
 		}

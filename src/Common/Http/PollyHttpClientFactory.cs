@@ -1,8 +1,8 @@
 ﻿using Flurl.Http.Configuration;
+using Polly.Wrap;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using Polly.Wrap;
 
 namespace Common.Http;
 

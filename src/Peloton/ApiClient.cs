@@ -47,7 +47,7 @@ namespace Peloton
 				limit = pageSize,
 				sort_by = "-created",
 				page = page,
-				joins= "ride,ride.instructor"
+				joins = "ride,ride.instructor"
 			})
 			.GetJsonAsync<PagedPelotonResponse<Workout>>();
 		}
@@ -161,7 +161,7 @@ namespace Peloton
 				.WithCommonHeaders()
 				.SetQueryParams(new
 				{
-					every_n=1
+					every_n = 1
 				})
 				.GetJsonAsync<WorkoutSamples>();
 		}

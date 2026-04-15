@@ -6,7 +6,7 @@
 		public uint UnitId { get; set; }
 		public ushort ProductID { get; set; }
 		public ushort ManufacturerId { get; set; } = 1;
-		public GarminDeviceVersion Version { get; set; } = new ();
+		public GarminDeviceVersion Version { get; set; } = new();
 	}
 
 	public class GarminDeviceVersion

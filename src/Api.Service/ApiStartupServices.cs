@@ -1,20 +1,20 @@
-﻿using Common.Database;
-using Common.Service;
+﻿using Api.Service;
+using Api.Services;
 using Common;
+using Common.Database;
+using Common.Service;
 using Conversion;
 using Garmin;
-using Microsoft.Extensions.Caching.Memory;
-using Peloton.AnnualChallenge;
-using Peloton;
-using Sync;
-using Philosowaffle.Capability.ReleaseChecks;
-using Microsoft.Extensions.DependencyInjection;
-using Api.Services;
 using Garmin.Auth;
-using Api.Service;
 using Garmin.Database;
-using Sync.Database;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Peloton;
+using Peloton.AnnualChallenge;
 using Peloton.Auth;
+using Philosowaffle.Capability.ReleaseChecks;
+using Sync;
+using Sync.Database;
 
 namespace SharedStartup;
 

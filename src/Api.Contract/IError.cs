@@ -12,7 +12,7 @@ public class ErrorResponse : IErrorResponse
 	public ErrorCode Code { get; set; }
 	public Exception? Exception { get; set; }
 
-	public ErrorResponse() 
+	public ErrorResponse()
 	{
 		Message = string.Empty;
 	}

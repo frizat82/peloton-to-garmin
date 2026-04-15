@@ -51,7 +51,7 @@ public static class TrackingTypes
 
 public record Weight
 {
-	//[JsonConverter(typeof(JsonStringEnumConverter))] 
+	//[JsonConverter(typeof(JsonStringEnumConverter))]
 	//public WeightCategory Weight_Category { get; init; }
 	public WeightData Weight_Data { get; init; }
 }

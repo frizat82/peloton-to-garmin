@@ -3,7 +3,7 @@
 public record ConsumerCredentials
 {
 	public string Consumer_Key { get; set; }
-	public string Consumer_Secret { get; set;}
+	public string Consumer_Secret { get; set; }
 }
 
 // 10/01/23

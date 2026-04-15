@@ -7,8 +7,8 @@ using System.IO;
 
 namespace Common.Database
 {
-    public abstract class DbBase<T>
-    {
+	public abstract class DbBase<T>
+	{
 		private static readonly ILogger _logger = LogContext.ForClass<DbBase<T>>();
 
 		protected IFileHandling _fileHandler;

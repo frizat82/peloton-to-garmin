@@ -14,7 +14,7 @@ public class TcxConverter : Converter<XElement>
 {
 	private static readonly ILogger _logger = LogContext.ForClass<TcxConverter>();
 
-	public TcxConverter(ISettingsService settings, IFileHandling fileHandler) : base(settings, fileHandler) 
+	public TcxConverter(ISettingsService settings, IFileHandling fileHandler) : base(settings, fileHandler)
 	{
 		Format = FileFormat.Tcx;
 	}
@@ -67,7 +67,7 @@ public class TcxConverter : Converter<XElement>
 		var extensions = new XElement(ns1 + "Extensions");
 		extensions.Add(lx);
 
-		var track = new XElement(ns1+"Track");
+		var track = new XElement(ns1 + "Track");
 		var allMetrics = samples.Metrics;
 		var hrMetrics = allMetrics.FirstOrDefault(m => m.Slug == "heart_rate");
 		var outputMetrics = allMetrics.FirstOrDefault(m => m.Slug == "output");
@@ -78,29 +78,29 @@ public class TcxConverter : Converter<XElement>
 		var altitudeMetrics = allMetrics.FirstOrDefault(m => m.Slug == "altitude");
 		for (var i = 0; i < samples.Seconds_Since_Pedaling_Start.Count; i++)
 		{
-			var trackPoint = new XElement(ns1+"TrackPoint");
+			var trackPoint = new XElement(ns1 + "TrackPoint");
 
 			if (locationMetrics is object && i < locationMetrics.Length)
 			{
-				var trackPosition = new XElement(ns1+"Position");
-				trackPosition.Add(new XElement(ns1+"LatitudeDegrees", locationMetrics[i].Latitude));
-				trackPosition.Add(new XElement(ns1+"LongitudeDegrees", locationMetrics[i].Longitude));
+				var trackPosition = new XElement(ns1 + "Position");
+				trackPosition.Add(new XElement(ns1 + "LatitudeDegrees", locationMetrics[i].Latitude));
+				trackPosition.Add(new XElement(ns1 + "LongitudeDegrees", locationMetrics[i].Longitude));
 
 				if (altitudeMetrics is object && i < altitudeMetrics.Values.Length)
-					trackPosition.Add(new XElement(ns1+"AltitudeMeters", ConvertDistanceToMeters(altitudeMetrics.GetValue(i), altitudeMetrics.Display_Unit)));
+					trackPosition.Add(new XElement(ns1 + "AltitudeMeters", ConvertDistanceToMeters(altitudeMetrics.GetValue(i), altitudeMetrics.Display_Unit)));
 
 				trackPoint.Add(trackPosition);
 			}
 
 			if (hrMetrics is object && i < hrMetrics.Values.Length)
 			{
-				var hr = new XElement(ns1+"HeartRateBpm");
-				hr.Add(new XElement(ns1+"Value", hrMetrics.Values[i]));
+				var hr = new XElement(ns1 + "HeartRateBpm");
+				hr.Add(new XElement(ns1 + "Value", hrMetrics.Values[i]));
 				trackPoint.Add(hr);
 			}
 
 			if (cadenceMetrics is object && i < cadenceMetrics.Values.Length)
-				trackPoint.Add(new XElement(ns1+"Cadence", cadenceMetrics.Values[i]));
+				trackPoint.Add(new XElement(ns1 + "Cadence", cadenceMetrics.Values[i]));
 
 			var tpx = new XElement(activityExtensions + "TPX");
 			if (speedMetrics is object && i < speedMetrics.Values.Length)
@@ -112,44 +112,44 @@ public class TcxConverter : Converter<XElement>
 			if (resistanceMetrics is object && i < resistanceMetrics.Values.Length)
 				tpx.Add(new XElement(activityExtensions + "Resistance", resistanceMetrics.Values[i]));
 
-			var trackPointExtension = new XElement(ns1+"Extensions");
+			var trackPointExtension = new XElement(ns1 + "Extensions");
 			trackPointExtension.Add(tpx);
 
 			trackPoint.Add(trackPointExtension);
-			trackPoint.Add(new XElement(ns1+"Time", GetTimeStamp(startTime, i)));
+			trackPoint.Add(new XElement(ns1 + "Time", GetTimeStamp(startTime, i)));
 
 			track.Add(trackPoint);
 		}
 
-		var lap = new XElement(ns1+"Lap");
+		var lap = new XElement(ns1 + "Lap");
 		lap.SetAttributeValue("StartTime", GetTimeStamp(startTime));
-		lap.Add(new XElement(ns1+"TotalTimeSeconds", samples.Duration));
-		lap.Add(new XElement(ns1+"Intensity", "Active"));
-		lap.Add(new XElement(ns1+"Triggermethod", "Manual"));
-		lap.Add(new XElement(ns1+"DistanceMeters", GetTotalDistance(samples)));
-		lap.Add(new XElement(ns1+"MaximumSpeed", GetMaxSpeedMetersPerSecond(samples)));
-		lap.Add(new XElement(ns1+"Calories", GetCalorieSummary(samples)?.Value));
-		lap.Add(new XElement(ns1+"AverageHeartRateBpm", new XElement(ns1+"Value", hrSummary?.Average_Value)));
-		lap.Add(new XElement(ns1+"MaximumHeartRateBpm", new XElement(ns1+"Value", hrSummary?.Max_Value)));
+		lap.Add(new XElement(ns1 + "TotalTimeSeconds", samples.Duration));
+		lap.Add(new XElement(ns1 + "Intensity", "Active"));
+		lap.Add(new XElement(ns1 + "Triggermethod", "Manual"));
+		lap.Add(new XElement(ns1 + "DistanceMeters", GetTotalDistance(samples)));
+		lap.Add(new XElement(ns1 + "MaximumSpeed", GetMaxSpeedMetersPerSecond(samples)));
+		lap.Add(new XElement(ns1 + "Calories", GetCalorieSummary(samples)?.Value));
+		lap.Add(new XElement(ns1 + "AverageHeartRateBpm", new XElement(ns1 + "Value", hrSummary?.Average_Value)));
+		lap.Add(new XElement(ns1 + "MaximumHeartRateBpm", new XElement(ns1 + "Value", hrSummary?.Max_Value)));
 		lap.Add(lx);
 		lap.Add(track);
 
 		var activity = new XElement(ns1 + "Activity");
 		activity.SetAttributeValue("Sport", sport);
-		activity.Add(new XElement(ns1+"Id", GetTimeStamp(startTime)));
+		activity.Add(new XElement(ns1 + "Id", GetTimeStamp(startTime)));
 		activity.Add(lap);
 
-		var creatorVersion = new XElement(ns1+"Version");
-		creatorVersion.Add(new XElement(ns1+"VersionMajor", deviceInfo.Version.VersionMajor));
-		creatorVersion.Add(new XElement(ns1+"VersionMinor", deviceInfo.Version.VersionMinor));
-		creatorVersion.Add(new XElement(ns1+"BuildMajor", deviceInfo.Version.BuildMajor));
-		creatorVersion.Add(new XElement(ns1+"BuildMinor", deviceInfo.Version.BuildMinor));
+		var creatorVersion = new XElement(ns1 + "Version");
+		creatorVersion.Add(new XElement(ns1 + "VersionMajor", deviceInfo.Version.VersionMajor));
+		creatorVersion.Add(new XElement(ns1 + "VersionMinor", deviceInfo.Version.VersionMinor));
+		creatorVersion.Add(new XElement(ns1 + "BuildMajor", deviceInfo.Version.BuildMajor));
+		creatorVersion.Add(new XElement(ns1 + "BuildMinor", deviceInfo.Version.BuildMinor));
 
-		var creator = new XElement(ns1+"Creator");
+		var creator = new XElement(ns1 + "Creator");
 		creator.Add(new XAttribute(xsi + "type", "Device_t"));
-		creator.Add(new XElement(ns1+"Name", deviceInfo.Name));
-		creator.Add(new XElement(ns1+"UnitId", deviceInfo.UnitId));
-		creator.Add(new XElement(ns1+"ProductID", deviceInfo.ProductID));
+		creator.Add(new XElement(ns1 + "Name", deviceInfo.Name));
+		creator.Add(new XElement(ns1 + "UnitId", deviceInfo.UnitId));
+		creator.Add(new XElement(ns1 + "ProductID", deviceInfo.ProductID));
 		creator.Add(creatorVersion);
 		activity.Add(creator);
 

@@ -119,14 +119,15 @@ namespace UnitTests.Conversion
 					validator.Write(convertedMesgs); // validates while writing
 					validator.Close();
 				}
-			} finally
+			}
+			finally
 			{
 				System.IO.File.Delete(dest);
 			}
 		}
 
 		[Test]
-		public void Fit_Converter_Builds_Valid_DeviceInfoMesg([Values(5)] int major, [Values(0,-1,3,12)] int minor)
+		public void Fit_Converter_Builds_Valid_DeviceInfoMesg([Values(5)] int major, [Values(0, -1, 3, 12)] int minor)
 		{
 			var info = new GarminDeviceInfo()
 			{
@@ -157,10 +158,12 @@ namespace UnitTests.Conversion
 			if (minor <= 0)
 			{
 				version.Should().Be(5.0f);
-			} else if (minor == 3)
+			}
+			else if (minor == 3)
 			{
 				version.Should().Be(5.3f);
-			} else if (minor == 12)
+			}
+			else if (minor == 12)
 			{
 				version.Should().Be(5.12f);
 			}

@@ -1,8 +1,8 @@
-﻿using NUnit.Framework;
+﻿using Common.Dto.Peloton;
+using FluentAssertions;
+using NUnit.Framework;
 using Peloton;
 using System.Collections.Generic;
-using Common.Dto.Peloton;
-using FluentAssertions;
 
 namespace UnitTests.PelotonTests;
 

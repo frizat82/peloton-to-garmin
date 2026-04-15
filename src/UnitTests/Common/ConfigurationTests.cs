@@ -1,9 +1,9 @@
-﻿using NUnit.Framework;
-using System;
-using Common;
-using FluentAssertions;
-using System.IO;
+﻿using Common;
 using Common.Dto;
+using FluentAssertions;
+using NUnit.Framework;
+using System;
+using System.IO;
 
 namespace UnitTests.Common
 {

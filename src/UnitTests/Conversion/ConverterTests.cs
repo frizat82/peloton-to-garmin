@@ -32,7 +32,7 @@ namespace UnitTests.Conversion
 			};
 
 			var startTime = converter.GetStartTime1(wokout);
-			startTime.Should().BeCloseTo(nowCst.ToUniversalTime(), new TimeSpan(0,0,59));
+			startTime.Should().BeCloseTo(nowCst.ToUniversalTime(), new TimeSpan(0, 0, 59));
 		}
 
 		[Test]
@@ -83,7 +83,7 @@ namespace UnitTests.Conversion
 		}
 
 		[Test]
-		public void GetTimeStampTest([Values(0,10)] long offset)
+		public void GetTimeStampTest([Values(0, 10)] long offset)
 		{
 			var now = System.DateTime.Parse("2021-04-01 03:14:12");
 
@@ -95,14 +95,15 @@ namespace UnitTests.Conversion
 			if (offset == 0)
 			{
 				timeStamp.Should().Be("2021-04-01T03:14:12Z");
-			} else
+			}
+			else
 			{
 				timeStamp.Should().Be("2021-04-01T03:14:22Z");
 			}
 		}
 
 		[Test]
-		public void ConvertDistanceToMetersTest([Values("km","mi","ft", "KM", "m","unknown", "min/500m")]string unit)
+		public void ConvertDistanceToMetersTest([Values("km", "mi", "ft", "KM", "m", "unknown", "min/500m")] string unit)
 		{
 			var value = 8677;
 			var converted = FitConverter.ConvertDistanceToMeters(value, unit);
@@ -152,9 +153,9 @@ namespace UnitTests.Conversion
 		{
 			var distance = 600;
 			var workoutSample = new WorkoutSamples();
-			workoutSample.Summaries = new List<Summary>() 
-			{ 
-				new Summary() { Slug = "distance", Display_Unit = unit, Value = distance } 
+			workoutSample.Summaries = new List<Summary>()
+			{
+				new Summary() { Slug = "distance", Display_Unit = unit, Value = distance }
 			};
 
 			var expectedDistance = FitConverter.ConvertDistanceToMeters(distance, unit);
@@ -387,7 +388,7 @@ namespace UnitTests.Conversion
 		public void GetOutputSummary_CalorieSlug_ReturnsSummary()
 		{
 			var workoutSamples = new WorkoutSamples();
-			workoutSamples.Metrics = new List<Metric>() { new Metric() { Slug = "output",  Max_Value = 100, Average_Value = 50 } };
+			workoutSamples.Metrics = new List<Metric>() { new Metric() { Slug = "output", Max_Value = 100, Average_Value = 50 } };
 
 			var autoMocker = new AutoMocker();
 			var converter = autoMocker.CreateInstance<ConverterInstance>();
@@ -457,7 +458,7 @@ namespace UnitTests.Conversion
 		// workout source
 		class CyclingFtpScenarios
 		{
-			public static object[] Cases = 
+			public static object[] Cases =
 			{
 				new object[] { null, null, null },
 				new object[] { new Workout(), new UserData(), (ushort)0 },
@@ -518,7 +519,7 @@ namespace UnitTests.Conversion
 
 		private class ConverterInstance : Converter<string>
 		{
-			public ConverterInstance(ISettingsService settings, IFileHandling fileHandling) : base(settings, fileHandling) 
+			public ConverterInstance(ISettingsService settings, IFileHandling fileHandling) : base(settings, fileHandling)
 			{
 				Format = FileFormat.Fit;
 			}

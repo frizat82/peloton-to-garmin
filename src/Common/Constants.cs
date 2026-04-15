@@ -11,4 +11,3 @@
 		public const string AppVersion = "6.0.1";
 	}
 }
-

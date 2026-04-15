@@ -153,7 +153,8 @@ public static class StackedWorkoutsCalculator
 				};
 
 				stackedWorkouts.Add(stackedWorkout);
-			} catch(Exception e)
+			}
+			catch (Exception e)
 			{
 				_logger.Error(e, "Failed to build workout stack.  First workout in stack is {0}.", stack.Value.FirstOrDefault()?.Workout?.Name);
 			}
@@ -166,7 +167,7 @@ public static class StackedWorkoutsCalculator
 	{
 		var stackedLocationData = new List<LocationData>();
 
-		if (workoutsToStack is null || workoutsToStack.Count <= 0) 
+		if (workoutsToStack is null || workoutsToStack.Count <= 0)
 			return stackedLocationData;
 
 		var totalSecondsSoFar = 0;
@@ -196,7 +197,7 @@ public static class StackedWorkoutsCalculator
 
 				stackedLocationData.AddRange(adjustedLocationData);
 			}
-			
+
 			totalSecondsSoFar += workout?.WorkoutSamples?.Duration ?? 0;
 		}
 
@@ -298,7 +299,7 @@ public static class StackedWorkoutsCalculator
 												Movement_Id = r.Movement_Id,
 												Movement_Name = r.Movement_Name,
 												Tracking_Type = r.Tracking_Type,
-												Completed_Reps = r. Completed_Reps,
+												Completed_Reps = r.Completed_Reps,
 												Completed_Duration = r.Completed_Duration,
 												Offset = r.Offset + totalSecondsSoFar,
 												Length = r.Length,
@@ -308,7 +309,7 @@ public static class StackedWorkoutsCalculator
 
 			if (adjustedRepiritonData is object)
 				stackedRepitionData.AddRange(adjustedRepiritonData);
-			
+
 			totalSecondsSoFar += workout.WorkoutSamples?.Duration ?? 0;
 		}
 
@@ -357,7 +358,7 @@ public static class StackedWorkoutsCalculator
 
 			if (adjustedSegments is object)
 				stackedSegments.AddRange(adjustedSegments);
-			
+
 			totalSecondsSoFar += workout.WorkoutSamples?.Duration ?? 0;
 		}
 
@@ -384,7 +385,7 @@ public static class StackedWorkoutsCalculator
 			if (adjustedSeconds is object)
 				stackedSeconds.AddRange(adjustedSeconds);
 
-			totalSecondsSoFar += workout.WorkoutSamples?.Duration  ?? 0;
+			totalSecondsSoFar += workout.WorkoutSamples?.Duration ?? 0;
 		}
 
 		return stackedSeconds;
@@ -504,7 +505,7 @@ public static class StackedWorkoutsCalculator
 
 			if (adjustedExercises is object)
 				stackedExercises.AddRange(adjustedExercises);
-			
+
 			totalSecondsSoFar += workout.WorkoutSamples?.Duration ?? 0;
 		}
 

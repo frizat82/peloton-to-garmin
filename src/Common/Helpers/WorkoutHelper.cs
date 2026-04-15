@@ -19,7 +19,7 @@ public static class WorkoutHelper
 		var rideTitle = workout.Ride?.Title ?? workout.Id;
 		var instructorName = workout.Ride?.Instructor?.Name;
 
-		var templateData = new 
+		var templateData = new
 		{
 			PelotonWorkoutTitle = rideTitle,
 			PelotonInstructorName = instructorName
@@ -28,7 +28,7 @@ public static class WorkoutHelper
 		var template = settings.WorkoutTitleTemplate;
 		if (string.IsNullOrWhiteSpace(template))
 			template = new Format().WorkoutTitleTemplate;
-		
+
 		var compiledTemplate = Handlebars.Compile(settings.WorkoutTitleTemplate);
 		var title = compiledTemplate(templateData);
 

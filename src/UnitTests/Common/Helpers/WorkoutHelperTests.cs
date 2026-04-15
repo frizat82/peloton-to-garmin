@@ -9,7 +9,7 @@ namespace UnitTests.Common;
 public class WorkoutHelperTests
 {
 
-	[Platform(Exclude ="Unix,Linux,MacOSX")]
+	[Platform(Exclude = "Unix,Linux,MacOSX")]
 	[TestCase("My Title", "Some Instructor", ExpectedResult = "My_Title_with_Some_Instructor")]
 	[TestCase("My/Title", "Some/Instructor", ExpectedResult = "My-Title_with_Some-Instructor")]
 	[TestCase("My:Title", "Some:Instructor", ExpectedResult = "My-Title_with_Some-Instructor")]
@@ -23,7 +23,7 @@ public class WorkoutHelperTests
 				Title = title,
 				Instructor = new Instructor()
 				{
-					Name =instructor
+					Name = instructor
 				}
 			}
 		};
@@ -102,7 +102,7 @@ public class WorkoutHelperTests
 			Ride = new Ride()
 			{
 				Title = "My Title",
-				Instructor = new Instructor() { Name = "Instructor"}
+				Instructor = new Instructor() { Name = "Instructor" }
 			}
 		};
 
