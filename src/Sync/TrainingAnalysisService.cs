@@ -203,18 +203,44 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		if (userMaxHR > 0 && garminActivities.Count > 0)
 		{
 			var workoutStart = DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime;
-			var match = garminActivities.FirstOrDefault(a =>
-			{
-				if (!DateTime.TryParse(a.StartTimeGMT, out var garminStart)) return false;
-				return Math.Abs((garminStart - workoutStart).TotalMinutes) <= 15;
-			});
 
-			if (match?.AverageHR > 0)
+			GarminActivitySummary? match = null;
+			double bestDelta = double.MaxValue;
+			foreach (var a in garminActivities)
+			{
+				if (!DateTime.TryParse(a.StartTimeGMT, System.Globalization.CultureInfo.InvariantCulture,
+					System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+					out var garminStart)) continue;
+				var delta = Math.Abs((garminStart - workoutStart).TotalMinutes);
+				if (delta <= 15 && delta < bestDelta)
+				{
+					bestDelta = delta;
+					match = a;
+				}
+			}
+
+			if (match is not null && match.AverageHR > 0)
 			{
 				var hrRatio = match.AverageHR!.Value / userMaxHR;
 				var hrTss = (durationSec / 3600.0) * hrRatio * hrRatio * 100.0;
+				_logger.Debug("hrTSS: {Discipline} on {Date} → Garmin '{Name}' delta={Delta:F1}min avgHR={HR} maxHR={Max} tss={TSS:F1}",
+					w.Fitness_Discipline, workoutStart.Date.ToString("MM-dd"), match.ActivityName, bestDelta, match.AverageHR, userMaxHR, hrTss);
 				return Math.Min(hrTss, 400);
 			}
+
+			_logger.Debug("hrTSS miss: {Discipline} on {Date:MM-dd} @ {Start:HH:mm} UTC — no Garmin match within 15 min (have {Count} candidates, closest={ClosestDelta:F1}min)",
+				w.Fitness_Discipline, workoutStart, workoutStart,
+				garminActivities.Count,
+				garminActivities
+					.Where(a => DateTime.TryParse(a.StartTimeGMT, System.Globalization.CultureInfo.InvariantCulture,
+						System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out _))
+					.Select(a =>
+					{
+						DateTime.TryParse(a.StartTimeGMT, System.Globalization.CultureInfo.InvariantCulture,
+							System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var t);
+						return Math.Abs((t - workoutStart).TotalMinutes);
+					})
+					.DefaultIfEmpty(double.MaxValue).Min());
 		}
 
 		// Fallback: duration-based estimate by discipline

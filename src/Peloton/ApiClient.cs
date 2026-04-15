@@ -214,9 +214,10 @@ namespace Peloton
 					content_format = "audio,video",
 					limit = limit,
 					page = 0,
-					sort_by = "difficulty_estimate",
+					sort_by = "original_air_time",
 					joins = "ride.instructor"
 				})
+				.WithTimeout(30)
 				.GetJsonAsync<PelotonResponse<Ride>>();
 		}
 	}
