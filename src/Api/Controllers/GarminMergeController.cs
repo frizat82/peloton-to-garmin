@@ -1,9 +1,11 @@
 using Api.Contract;
+using Garmin;
 using Garmin.Database;
 using Garmin.Dto;
 using Microsoft.AspNetCore.Mvc;
 using Sync;
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -84,6 +86,46 @@ public class GarminMergeController : Controller
 		};
 
 		return Ok(response);
+	}
+
+	/// <summary>
+	/// Lists original watch FIT files backed up before FIT merge operations.
+	/// </summary>
+	[HttpGet("fit-backups")]
+	[ProducesResponseType(typeof(FitBackupListResponse), StatusCodes.Status200OK)]
+	public ActionResult<FitBackupListResponse> GetFitBackups()
+	{
+		var backups = GarminActivityEnrichmentService.ListFitBackups();
+		return Ok(new FitBackupListResponse
+		{
+			Items = backups.Select(b => new FitBackupItem
+			{
+				FileName = b.FileName,
+				SizeBytes = b.SizeBytes,
+				CreatedUtc = b.CreatedUtc,
+			}).ToList()
+		});
+	}
+
+	/// <summary>
+	/// Downloads a specific backed-up original watch FIT file by filename.
+	/// </summary>
+	[HttpGet("fit-backups/{fileName}")]
+	[Produces("application/octet-stream")]
+	public ActionResult DownloadFitBackup(string fileName)
+	{
+		// Prevent path traversal
+		if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(".."))
+			return BadRequest();
+
+		var dir = GarminActivityEnrichmentService.GetFitBackupDirectory();
+		var fullPath = Path.Join(dir, fileName);
+
+		if (!System.IO.File.Exists(fullPath))
+			return NotFound();
+
+		var bytes = System.IO.File.ReadAllBytes(fullPath);
+		return File(bytes, "application/octet-stream", fileName);
 	}
 
 	[HttpPost]

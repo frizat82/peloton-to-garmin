@@ -80,8 +80,49 @@
     </BodyTemplate>
 </HxCard>
 
+@if (_fitBackups is { Count: > 0 })
+{
+    <HxCard CssClass="mb-3">
+        <HeaderTemplate>
+            <strong>Original Watch FIT Backups</strong>
+            <small class="text-muted ms-2">Saved before merge — download to recover HR / GPS data</small>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Date</th>
+                            <th>Size</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var backup in _fitBackups)
+                        {
+                            <tr>
+                                <td class="small text-break">@backup.FileName</td>
+                                <td class="small text-nowrap">@backup.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                <td class="small text-nowrap">@($"{backup.SizeBytes / 1024.0:F1} KB")</td>
+                                <td>
+                                    <a href="api/garminmerge/fit-backups/@Uri.EscapeDataString(backup.FileName)"
+                                       class="btn btn-sm btn-outline-secondary" download="@backup.FileName">
+                                        Download
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </BodyTemplate>
+    </HxCard>
+}
+
 @code {
     private ICollection<GarminMergeRecordDto>? _records;
+    private ICollection<FitBackupItem>? _fitBackups;
     private string _manualWorkoutId = string.Empty;
     private bool _loading = false;
 
@@ -92,7 +133,21 @@
     protected override async Task OnInitializedAsync()
     {
         using var tracing = Tracing.ClientTrace($"{nameof(GarminMerge)}.{nameof(OnInitializedAsync)}", kind: ActivityKind.Client);
-        await LoadMergeHistoryAsync();
+        await Task.WhenAll(LoadMergeHistoryAsync(), LoadFitBackupsAsync());
+    }
+
+    private async Task LoadFitBackupsAsync()
+    {
+        try
+        {
+            var response = await _apiClient.GetFitBackupsAsync();
+            _fitBackups = response.Items;
+        }
+        catch (Exception e)
+        {
+            Log.Warning("UI - Could not load FIT backups: {Message}", e.Message);
+            _fitBackups = Array.Empty<FitBackupItem>();
+        }
     }
 
     private Task<GridDataProviderResult<GarminMergeRecordDto>> MergeRecordsDataProviderAsync(GridDataProviderRequest<GarminMergeRecordDto> request)

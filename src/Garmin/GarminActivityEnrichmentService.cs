@@ -308,6 +308,12 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			return;
 		}
 
+		// Back up the original watch FIT before we delete anything — this is the
+		// safety copy the user can download from the WebUI to recover HR/GPS data
+		// if the merge or upload goes wrong.
+		await SaveOriginalFitBackupAsync(watchFitBytes, garminActivityId, workoutStart,
+			BuildActivityName(primary.P2GWorkout.Workout) ?? primary.P2GWorkout.Workout.Id);
+
 		_logger.Information("FIT merge: merging Peloton metrics into watch FIT ({Bytes} bytes)", watchFitBytes.Length);
 		var mergedFitBytes = GarminFitMergeService.MergeWatchFitWithPeloton(watchFitBytes, primary.P2GWorkout.WorkoutSamples, primary.P2GWorkout.Workout.Start_Time);
 
@@ -620,5 +626,56 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		}
 
 		return metric;
+	}
+
+	// ─── FIT backup ──────────────────────────────────────────────────────────
+
+	/// <summary>Returns the directory where original watch FIT backups are stored.</summary>
+	public static string GetFitBackupDirectory()
+	{
+		return Path.GetFullPath(Path.Join(Common.Stateful.Statics.DefaultOutputDirectory, "fit-backups"));
+	}
+
+	/// <summary>
+	/// Lists backed-up FIT files, newest first.
+	/// Each entry is (filename, fullPath, sizeBytes, createdUtc).
+	/// </summary>
+	public static IReadOnlyList<(string FileName, string FullPath, long SizeBytes, DateTime CreatedUtc)> ListFitBackups()
+	{
+		var dir = GetFitBackupDirectory();
+		if (!Directory.Exists(dir))
+			return Array.Empty<(string, string, long, DateTime)>();
+
+		return Directory.EnumerateFiles(dir, "*.fit")
+			.Select(p =>
+			{
+				var info = new FileInfo(p);
+				return (info.Name, p, info.Length, info.CreationTimeUtc);
+			})
+			.OrderByDescending(f => f.CreationTimeUtc)
+			.ToList();
+	}
+
+	private async Task SaveOriginalFitBackupAsync(byte[] fitBytes, long garminActivityId, DateTime workoutStartUtc, string title)
+	{
+		try
+		{
+			var dir = GetFitBackupDirectory();
+			Directory.CreateDirectory(dir);
+
+			// Sanitize title for use in filename
+			var safeTitle = string.Concat(title.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+			if (safeTitle.Length > 60) safeTitle = safeTitle[..60];
+
+			var filename = $"{workoutStartUtc:yyyy-MM-dd}_{garminActivityId}_{safeTitle}.fit";
+			var fullPath = Path.Join(dir, filename);
+
+			await File.WriteAllBytesAsync(fullPath, fitBytes);
+			_logger.Information("FIT merge: saved original watch FIT backup to {Path} ({Bytes} bytes)", fullPath, fitBytes.Length);
+		}
+		catch (Exception e)
+		{
+			_logger.Warning(e, "FIT merge: could not save original FIT backup — continuing with merge anyway.");
+		}
 	}
 }

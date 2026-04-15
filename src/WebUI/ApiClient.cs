@@ -323,4 +323,18 @@ public class ApiClient : IApiClient
 			throw new ApiClientException(error?.Message, e);
 		}
 	}
+
+	public async Task<FitBackupListResponse> GetFitBackupsAsync()
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/garminmerge/fit-backups"
+				.GetJsonAsync<FitBackupListResponse>();
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
 }

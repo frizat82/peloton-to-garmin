@@ -32,6 +32,7 @@ public interface IApiClient
 	Task<GarminMergeGetResponse> GarminMergeGetAsync();
 	Task<GarminMergePostResponse> GarminMergePostAsync(GarminMergePostRequest request);
 	Task<GarminMergePreviewResponse> GarminMergePreviewAsync(GarminMergePreviewRequest request);
+	Task<FitBackupListResponse> GetFitBackupsAsync();
 }
 
 public class ApiClientException : Exception

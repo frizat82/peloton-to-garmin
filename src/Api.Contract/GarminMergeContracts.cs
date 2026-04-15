@@ -56,3 +56,15 @@ public record GarminMergePreviewResponse
 {
 	public ICollection<GarminMergePreviewItem> Items { get; init; } = new List<GarminMergePreviewItem>();
 }
+
+public record FitBackupListResponse
+{
+	public ICollection<FitBackupItem> Items { get; init; } = new List<FitBackupItem>();
+}
+
+public record FitBackupItem
+{
+	public string FileName { get; init; } = string.Empty;
+	public long SizeBytes { get; init; }
+	public DateTime CreatedUtc { get; init; }
+}
