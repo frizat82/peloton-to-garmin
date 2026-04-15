@@ -223,12 +223,12 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 			{
 				var hrRatio = match.AverageHR!.Value / userMaxHR;
 				var hrTss = (durationSec / 3600.0) * hrRatio * hrRatio * 100.0;
-				_logger.Debug("hrTSS: {Discipline} on {Date} → Garmin '{Name}' delta={Delta:F1}min avgHR={HR} maxHR={Max} tss={TSS:F1}",
+				_logger.Information("hrTSS: {Discipline} on {Date} → Garmin '{Name}' delta={Delta:F1}min avgHR={HR} maxHR={Max} tss={TSS:F1}",
 					w.Fitness_Discipline, workoutStart.Date.ToString("MM-dd"), match.ActivityName, bestDelta, match.AverageHR, userMaxHR, hrTss);
 				return Math.Min(hrTss, 400);
 			}
 
-			_logger.Debug("hrTSS miss: {Discipline} on {Date:MM-dd} @ {Start:HH:mm} UTC — no Garmin match within 15 min (have {Count} candidates, closest={ClosestDelta:F1}min)",
+			_logger.Information("hrTSS miss: {Discipline} on {Date:MM-dd} @ {Start:HH:mm} UTC — no Garmin match within 15 min (have {Count} candidates, closest={ClosestDelta:F1}min)",
 				w.Fitness_Discipline, workoutStart, workoutStart,
 				garminActivities.Count,
 				garminActivities

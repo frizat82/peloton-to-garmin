@@ -205,7 +205,7 @@ namespace Peloton
 		public async Task<PelotonResponse<Ride>> GetCatalogClassesAsync(string browseCategory, int limit)
 		{
 			var auth = await GetAuthAsync();
-			return await $"{BaseUrl}/v2/ride/filter"
+			return await $"{BaseUrl}/v3/ride/content"
 				.WithOAuthBearerToken(auth.Token.AccessToken)
 				.WithCommonHeaders()
 				.SetQueryParams(new
