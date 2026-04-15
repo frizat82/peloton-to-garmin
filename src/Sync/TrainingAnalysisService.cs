@@ -1,6 +1,9 @@
 using Api.Contract;
 using Common.Dto;
 using Common.Dto.Peloton;
+using Garmin;
+using Garmin.Auth;
+using Garmin.Dto;
 using Peloton;
 using Serilog;
 using System;
@@ -36,10 +39,14 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 	};
 
 	private readonly IPelotonService _pelotonService;
+	private readonly IGarminApiClient _garminApiClient;
+	private readonly IGarminAuthenticationService _garminAuthService;
 
-	public TrainingAnalysisService(IPelotonService pelotonService)
+	public TrainingAnalysisService(IPelotonService pelotonService, IGarminApiClient garminApiClient, IGarminAuthenticationService garminAuthService)
 	{
 		_pelotonService = pelotonService;
+		_garminApiClient = garminApiClient;
+		_garminAuthService = garminAuthService;
 	}
 
 	public async Task<TrainingStateGetResponse> GetTrainingStateAsync()
@@ -70,8 +77,21 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		if (completedWorkouts.Count == 0)
 			return EmptyState();
 
+		// Fetch Garmin HR data for the same window (single call) to enable hrTSS for non-cycling workouts
+		ICollection<GarminActivitySummary> garminActivities = Array.Empty<GarminActivitySummary>();
+		try
+		{
+			var auth = await _garminAuthService.GetGarminAuthenticationAsync();
+			if (auth is not null)
+				garminActivities = await _garminApiClient.SearchActivitiesAsync(since, DateTime.UtcNow, auth);
+		}
+		catch (Exception ex) { _logger.Warning(ex, "Could not fetch Garmin activities for hrTSS; falling back to discipline estimates."); }
+
+		// Derive user max HR as the highest MaxHR seen across all Garmin activities (proxy for physiological max)
+		var userMaxHR = garminActivities.Where(a => a.MaxHR > 0).Select(a => a.MaxHR!.Value).DefaultIfEmpty(0).Max();
+
 		// Build map of date → total TSS for that day
-		var dailyTss = BuildDailyTss(completedWorkouts, userData);
+		var dailyTss = BuildDailyTss(completedWorkouts, userData, garminActivities, userMaxHR);
 
 		// Run EMA from 60 days ago through today, one day at a time
 		var today = DateTime.UtcNow.Date;
@@ -131,44 +151,62 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 	// ─── TSS calculation ─────────────────────────────────────────────────────
 
 	private static Dictionary<DateTime, double> BuildDailyTss(
-		IEnumerable<Workout> workouts, UserData? userData)
+		IEnumerable<Workout> workouts, UserData? userData,
+		ICollection<GarminActivitySummary> garminActivities, double userMaxHR)
 	{
 		var daily = new Dictionary<DateTime, double>();
 
 		foreach (var w in workouts)
 		{
 			var date = DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime.Date;
-			var tss = ComputeTss(w, userData);
+			var tss = ComputeTss(w, userData, garminActivities, userMaxHR);
 			daily[date] = daily.TryGetValue(date, out var existing) ? existing + tss : tss;
 		}
 
 		return daily;
 	}
 
-	private static double ComputeTss(Workout w, UserData? userData)
+	private static double ComputeTss(Workout w, UserData? userData,
+		ICollection<GarminActivitySummary> garminActivities, double userMaxHR)
 	{
 		var durationSec = w.End_Time!.Value - w.Start_Time;
 		if (durationSec <= 0) return 0;
 
-		// Power-based TSS for cycling disciplines when we have FTP + output
+		// Power-based TSS for cycling when we have FTP + output
 		if (w.Fitness_Discipline is FitnessDiscipline.Cycling or FitnessDiscipline.Bike_Bootcamp
 			&& w.Total_Work > 0)
 		{
 			var ftp = GetFtp(userData);
 			if (ftp > 0)
 			{
-				// Total_Work from Peloton API is in Joules (app displays Total_Work / 1000 as kJ)
 				var avgPowerWatts = w.Total_Work / durationSec;
 				var intensityFactor = avgPowerWatts / ftp;
 				var tss = durationSec * avgPowerWatts * intensityFactor / (ftp * 3600.0) * 100.0;
-				return Math.Min(tss, 400); // cap sanity
+				return Math.Min(tss, 400);
 			}
 		}
 
-		// Duration-based estimate for everything else
-		var intensityPerHour = DisciplineIntensity.TryGetValue(w.Fitness_Discipline, out var rate)
-			? rate : 45;
+		// HR-based TSS (hrTSS) using Garmin watch data when available
+		// hrTSS = duration(h) × (avgHR / maxHR)² × 100
+		if (userMaxHR > 0 && garminActivities.Count > 0)
+		{
+			var workoutStart = DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime;
+			var match = garminActivities.FirstOrDefault(a =>
+			{
+				if (!DateTime.TryParse(a.StartTimeGMT, out var garminStart)) return false;
+				return Math.Abs((garminStart - workoutStart).TotalMinutes) <= 15;
+			});
 
+			if (match?.AverageHR > 0)
+			{
+				var hrRatio = match.AverageHR!.Value / userMaxHR;
+				var hrTss = (durationSec / 3600.0) * hrRatio * hrRatio * 100.0;
+				return Math.Min(hrTss, 400);
+			}
+		}
+
+		// Fallback: duration-based estimate by discipline
+		var intensityPerHour = DisciplineIntensity.TryGetValue(w.Fitness_Discipline, out var rate) ? rate : 45;
 		return (durationSec / 3600.0) * intensityPerHour;
 	}
 

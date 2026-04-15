@@ -17,6 +17,10 @@ public class GarminActivitySummary
 	public GarminActivityType ActivityType { get; set; }
 	[JsonPropertyName("duration")]
 	public double? Duration { get; set; }
+	[JsonPropertyName("averageHR")]
+	public double? AverageHR { get; set; }
+	[JsonPropertyName("maxHR")]
+	public double? MaxHR { get; set; }
 }
 
 public class GarminActivityType
