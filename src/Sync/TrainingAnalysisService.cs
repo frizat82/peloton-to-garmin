@@ -317,54 +317,51 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 	private async Task<ICollection<SuggestedClassDto>> GetSuggestedClassesAsync(
 		IntensityLevelDto intensity, HashSet<string> recentRideIds)
 	{
-		// Map intensity to target discipline and duration band
-		var (targetDiscipline, minDurationSec, maxDurationSec) = intensity switch
+		// Map intensity → catalog browse category, duration band, and difficulty target
+		var (browseCategory, targetDiscipline, minDurationSec, maxDurationSec, minDifficulty, maxDifficulty) = intensity switch
 		{
-			IntensityLevelDto.VeryHard => (FitnessDiscipline.Circuit, 3000, 4200), // 50–70 min tread bootcamp
-			IntensityLevelDto.Hard => (FitnessDiscipline.Circuit, 3000, 4200), // 50–70 min tread bootcamp
-			IntensityLevelDto.Moderate => (FitnessDiscipline.Cycling, 2400, 3600), // 40–60 min ride
-			IntensityLevelDto.Easy => (FitnessDiscipline.Cycling, 1500, 2700), // 25–45 min easy ride
-			IntensityLevelDto.Recovery => (FitnessDiscipline.Cycling, 1500, 2700), // 25–45 min easy ride
-			IntensityLevelDto.Rest => (FitnessDiscipline.Stretching, 300, 1800), // 5–30 min stretch
-			_ => (FitnessDiscipline.Circuit, 3000, 4200),
+			IntensityLevelDto.VeryHard => ("running", FitnessDiscipline.Circuit, 3000, 4200, 7.5, 10.0), // 50–70 min hard bootcamp
+			IntensityLevelDto.Hard => ("running", FitnessDiscipline.Circuit, 3000, 4200, 6.5, 9.5),  // 50–70 min bootcamp
+			IntensityLevelDto.Moderate => ("cycling", FitnessDiscipline.Cycling, 2400, 3600, 5.0, 8.0),  // 40–60 min ride
+			IntensityLevelDto.Easy => ("cycling", FitnessDiscipline.Cycling, 1500, 2700, 3.0, 6.5),  // 25–45 min easy ride
+			IntensityLevelDto.Recovery => ("cycling", FitnessDiscipline.Cycling, 1500, 2700, 1.0, 5.5),  // 25–45 min recovery ride
+			IntensityLevelDto.Rest => ("stretching", FitnessDiscipline.Stretching, 300, 1800, 0.0, 10.0), // 5–30 min stretch
+			_ => ("running", FitnessDiscipline.Circuit, 3000, 4200, 5.0, 9.0),
 		};
 
 		try
 		{
-			// Pull the last 200 workouts (includes history older than the 60-day window)
-			// The paginated endpoint returns ride+instructor data via joins=ride,ride.instructor
-			var result = await _pelotonService.GetRecentWorkoutsAsync(200);
-			if (!result.Successful || result.Result is null) return Array.Empty<SuggestedClassDto>();
+			// Pull from Peloton catalog — broad fetch so we have enough to filter by duration/difficulty
+			var rides = await _pelotonService.GetCatalogClassesAsync(browseCategory, 100);
 
-			var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-			return result.Result
-				.Where(w =>
-					w.Status == "COMPLETE"
-					&& w.Ride?.Id is not null
-					&& !recentRideIds.Contains(w.Ride.Id)          // not done in last 60 days
-					&& seen.Add(w.Ride.Id)                          // deduplicate same ride
-					&& w.Fitness_Discipline == targetDiscipline
-					&& (w.Ride.Duration ?? 0) >= minDurationSec
-					&& (w.Ride.Duration ?? 0) <= maxDurationSec)
-				.OrderByDescending(w => w.Ride!.Difficulty_Estimate)
-				.Take(5)
-				.Select(w => new SuggestedClassDto
+			return rides
+				.Where(r =>
+					r.Id is not null
+					&& !recentRideIds.Contains(r.Id)              // not done in last 60 days
+					&& (r.Duration ?? 0) >= minDurationSec
+					&& (r.Duration ?? 0) <= maxDurationSec
+					&& r.Difficulty_Estimate >= minDifficulty
+					&& r.Difficulty_Estimate <= maxDifficulty
+					&& !r.Is_Archived)
+				.OrderByDescending(r => r.Overall_Estimate)       // highest overall rating first
+				.Take(6)
+				.Select(r => new SuggestedClassDto
 				{
-					Id = w.Ride!.Id,
-					Title = w.Ride.Title ?? string.Empty,
-					Instructor = w.Ride.Instructor?.Name ?? string.Empty,
-					DurationMinutes = (w.Ride.Duration ?? minDurationSec) / 60,
-					DifficultyScore = Math.Round(w.Ride.Difficulty_Estimate, 1),
-					ImageUrl = w.Ride.Image_Url?.ToString() ?? string.Empty,
-					Discipline = w.Ride.Fitness_Discipline_Display_Name ?? FriendlyDiscipline(targetDiscipline),
-					PelotonUrl = PelotonClassUrl(targetDiscipline, w.Ride.Id),
+					Id = r.Id,
+					Title = r.Title ?? string.Empty,
+					Instructor = r.Instructor?.Name ?? string.Empty,
+					DurationMinutes = (r.Duration ?? minDurationSec) / 60,
+					DifficultyScore = Math.Round(r.Difficulty_Estimate, 1),
+					EstimatedCalories = (int)(r.Estimated_Calories_Output ?? 0),
+					ImageUrl = r.Image_Url?.ToString() ?? string.Empty,
+					Discipline = r.Fitness_Discipline_Display_Name ?? FriendlyDiscipline(targetDiscipline),
+					PelotonUrl = PelotonClassUrl(targetDiscipline, r.Id),
 				})
 				.ToList();
 		}
 		catch (Exception ex)
 		{
-			_logger.Warning(ex, "Could not build class suggestions from workout history.");
+			_logger.Warning(ex, "Could not fetch class suggestions from Peloton catalog.");
 			return Array.Empty<SuggestedClassDto>();
 		}
 	}

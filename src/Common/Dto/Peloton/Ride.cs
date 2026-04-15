@@ -49,6 +49,8 @@ namespace Common.Dto.Peloton
 		// ride type ids
 		public string Title { get; set; }
 		public Instructor Instructor { get; set; }
+		/// <summary>Estimated calorie burn for this class (kcal).</summary>
+		public double? Estimated_Calories_Output { get; set; }
 
 	}
 

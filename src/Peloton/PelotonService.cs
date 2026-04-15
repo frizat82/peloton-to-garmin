@@ -38,6 +38,11 @@ namespace Peloton
 		Task<PagedPelotonResponse<Workout>> GetPelotonWorkoutsAsync(int pageSize, int pageIndex);
 		Task<P2GWorkout[]> GetWorkoutDetailsAsync(ICollection<Workout> workoutIds);
 		Task<UserData> GetUserDataAsync();
+		/// <summary>
+		/// Browse the Peloton class catalog for a given discipline slug.
+		/// Returns up to <paramref name="limit"/> classes sorted by difficulty.
+		/// </summary>
+		Task<ICollection<Ride>> GetCatalogClassesAsync(string browseCategory, int limit);
 	}
 
 	public class PelotonService : IPelotonService
@@ -77,6 +82,15 @@ namespace Peloton
 			using var tracing = Tracing.Trace($"{nameof(PelotonService)}.{nameof(GetUserDataAsync)}");
 
 			return await _pelotonApi.GetUserDataAsync();
+		}
+
+		public async Task<ICollection<Ride>> GetCatalogClassesAsync(string browseCategory, int limit)
+		{
+			using var tracing = Tracing.Trace($"{nameof(PelotonService)}.{nameof(GetCatalogClassesAsync)}")
+				.WithTag("catalog.category", browseCategory);
+
+			var response = await _pelotonApi.GetCatalogClassesAsync(browseCategory, limit);
+			return response?.data ?? Array.Empty<Ride>();
 		}
 
 		public async Task<PagedPelotonResponse<Workout>> GetPelotonWorkoutsAsync(int pageSize, int pageIndex)

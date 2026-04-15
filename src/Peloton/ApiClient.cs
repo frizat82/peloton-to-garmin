@@ -19,6 +19,11 @@ namespace Peloton
 		Task<PelotonChallenges> GetJoinedChallengesAsync(int userId);
 		Task<PelotonUserChallengeDetail> GetUserChallengeDetailsAsync(int userId, string challengeId);
 		Task<RideSegments> GetClassSegmentsAsync(string rideId);
+		/// <summary>
+		/// Browse the Peloton class catalog for a given discipline.
+		/// browse_category is the Peloton discipline slug (e.g. "cycling", "running", "strength").
+		/// </summary>
+		Task<PelotonResponse<Ride>> GetCatalogClassesAsync(string browseCategory, int limit);
 	}
 
 	public class ApiClient : IPelotonApi
@@ -195,6 +200,24 @@ namespace Peloton
 				.WithOAuthBearerToken(auth.Token.AccessToken)
 				.WithCommonHeaders()
 				.GetJsonAsync<RideSegments>();
+		}
+
+		public async Task<PelotonResponse<Ride>> GetCatalogClassesAsync(string browseCategory, int limit)
+		{
+			var auth = await GetAuthAsync();
+			return await $"{BaseUrl}/v2/ride/filter"
+				.WithOAuthBearerToken(auth.Token.AccessToken)
+				.WithCommonHeaders()
+				.SetQueryParams(new
+				{
+					browse_category = browseCategory,
+					content_format = "audio,video",
+					limit = limit,
+					page = 0,
+					sort_by = "difficulty_estimate",
+					joins = "ride.instructor"
+				})
+				.GetJsonAsync<PelotonResponse<Ride>>();
 		}
 	}
 }

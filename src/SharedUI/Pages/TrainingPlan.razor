@@ -82,7 +82,7 @@
 <HxCard CssClass="mb-3">
     <HeaderTemplate>
         <strong>Suggested Classes</strong>
-        <small class="text-muted ms-2">From your workout history · not done in the last 60 days</small>
+        <small class="text-muted ms-2">From the Peloton catalog · matched to today's TSS target · excluding classes done in the last 60 days</small>
     </HeaderTemplate>
     <BodyTemplate>
         @if (_loading)
@@ -108,7 +108,11 @@
                                 </div>
                                 <div class="card-footer p-2 d-flex gap-2 flex-wrap">
                                     <span class="badge bg-secondary">@cls.DurationMinutes min</span>
-                                    <span class="badge @DifficultyBadge(cls.DifficultyScore)">@cls.DifficultyScore.ToString("F1")</span>
+                                    <span class="badge @DifficultyBadge(cls.DifficultyScore)" title="Difficulty">⚡ @cls.DifficultyScore.ToString("F1")</span>
+                                    @if (cls.EstimatedCalories > 0)
+                                    {
+                                        <span class="badge bg-info text-dark" title="Estimated calories">🔥 @cls.EstimatedCalories kcal</span>
+                                    }
                                     <span class="badge bg-light text-dark border">@cls.Discipline</span>
                                 </div>
                             </div>

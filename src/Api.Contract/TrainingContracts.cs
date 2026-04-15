@@ -56,6 +56,8 @@ public record SuggestedClassDto
 	public string Instructor { get; init; } = string.Empty;
 	public int DurationMinutes { get; init; }
 	public double DifficultyScore { get; init; }
+	/// <summary>Estimated calorie burn from Peloton catalog metadata (kcal). 0 when not available.</summary>
+	public int EstimatedCalories { get; init; }
 	public string ImageUrl { get; init; } = string.Empty;
 	public string Discipline { get; init; } = string.Empty;
 	public string PelotonUrl { get; init; } = string.Empty;
