@@ -28,7 +28,7 @@ jobs:
 
     - name: 📃 List SDKs
       run: dotnet --list-sdks
-    
+
     - name: 🎨 Restore MAUI Workloads
       run: dotnet workload restore
       shell: pwsh
@@ -39,7 +39,7 @@ jobs:
 
     - name: 🧹 Dotnet Clean
       run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
-    
+
     - name: 🎨 Dotnet Restore
       run: dotnet restore
 
@@ -70,7 +70,7 @@ jobs:
           dotnet-version: ${{ matrix.dotnet }}
           os: ${{ matrix.os }}
           framework: ${{ matrix.framework }}
- 
+
   publish-docker-images:
     name: 📢 Publish Docker Images
     runs-on: ubuntu-latest

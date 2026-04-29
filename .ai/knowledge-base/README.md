@@ -152,4 +152,4 @@ This knowledge base contains comprehensive documentation for maintaining, fixing
 
 ---
 
-**Note**: This knowledge base is maintained alongside the P2G codebase. When making significant changes to the application, please update the relevant documentation to keep it current and accurate. 
+**Note**: This knowledge base is maintained alongside the P2G codebase. When making significant changes to the application, please update the relevant documentation to keep it current and accurate.

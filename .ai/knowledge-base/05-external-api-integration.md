@@ -15,7 +15,7 @@ P2G integrates with two primary external APIs: Peloton API for workout data retr
    ```http
    POST /auth/login
    Content-Type: application/json
-   
+
    {
      "username_or_email": "user@example.com",
      "password": "password123"
@@ -176,7 +176,7 @@ var workouts = await $"{BaseUrl}/user/{userId}/workouts"
    ```http
    POST /sso/signin
    Content-Type: application/x-www-form-urlencoded
-   
+
    username=user@example.com&password=password123&embed=false&_csrf=token
    ```
 
@@ -184,7 +184,7 @@ var workouts = await $"{BaseUrl}/user/{userId}/workouts"
    ```http
    POST /sso/verifyMFA
    Content-Type: application/x-www-form-urlencoded
-   
+
    mfa-code=123456&_csrf=token
    ```
 
@@ -321,7 +321,7 @@ public static async Task<T> WithRetry<T>(
     TimeSpan baseDelay = default)
 {
     var delay = baseDelay == default ? TimeSpan.FromSeconds(1) : baseDelay;
-    
+
     for (int i = 0; i < maxRetries; i++)
     {
         try
@@ -334,7 +334,7 @@ public static async Task<T> WithRetry<T>(
             delay = TimeSpan.FromMilliseconds(delay.TotalMilliseconds * 2);
         }
     }
-    
+
     return await operation(); // Final attempt
 }
 ```
@@ -346,19 +346,19 @@ public class RateLimiter
 {
     private readonly SemaphoreSlim _semaphore;
     private readonly Timer _timer;
-    
+
     public RateLimiter(int requestsPerMinute)
     {
         _semaphore = new SemaphoreSlim(requestsPerMinute, requestsPerMinute);
-        _timer = new Timer(ReleaseSemaphore, null, 
+        _timer = new Timer(ReleaseSemaphore, null,
             TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
-    
+
     public async Task WaitAsync()
     {
         await _semaphore.WaitAsync();
     }
-    
+
     private void ReleaseSemaphore(object state)
     {
         _semaphore.Release();
@@ -414,14 +414,14 @@ public class RateLimiter
 public class TokenCache
 {
     private readonly IMemoryCache _cache;
-    
+
     public async Task<string> GetTokenAsync(string key)
     {
         if (_cache.TryGetValue(key, out string token))
         {
             return token;
         }
-        
+
         // Fetch new token
         token = await FetchNewTokenAsync();
         _cache.Set(key, token, TimeSpan.FromHours(1));
@@ -438,17 +438,17 @@ public async Task<IEnumerable<ConvertStatus>> ConvertWorkoutsAsync(
 {
     var batches = workouts.Chunk(10); // Process 10 at a time
     var results = new List<ConvertStatus>();
-    
+
     foreach (var batch in batches)
     {
         var tasks = batch.Select(ConvertWorkoutAsync);
         var batchResults = await Task.WhenAll(tasks);
         results.AddRange(batchResults);
-        
+
         // Rate limiting delay
         await Task.Delay(TimeSpan.FromSeconds(1));
     }
-    
+
     return results;
 }
 ```
@@ -466,4 +466,4 @@ services.AddHttpClient<IPelotonApi, PelotonApiClient>(client =>
     MaxConnectionsPerServer = 10,
     PooledConnectionLifetime = TimeSpan.FromMinutes(5)
 });
-``` 
+```

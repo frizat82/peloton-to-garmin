@@ -10,7 +10,7 @@ The Api looks for a file named `configuration.local.json` in the same directory 
 
 ```json
 {
-  "Api": { /** (1)! **/ }, 
+  "Api": { /** (1)! **/ },
   "Observability": { /** (2)! **/ }
 }
 ```

@@ -24,4 +24,3 @@ If you edited your configuration or settings to specify SessionId, you may delet
 Some users have reported needing to delete their `data/` directory before this new authentication scheme would work.  I'm not exactly sure why that is, it wasn't intentional, but worth noting.  This is inconvenient as it will require you to re-configure all of your settings again after the fact.  So if possible, see if P2G works first without deleting anything, if not, then try deleting the `data/` directory.
 
 To locate your configuration/settings/data start [here](../configuration/index.md).
-

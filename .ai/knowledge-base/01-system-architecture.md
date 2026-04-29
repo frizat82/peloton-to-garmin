@@ -20,7 +20,7 @@ P2G is a .NET 9.0 application that synchronizes workout data from Peloton to Gar
 ### 1. Application Entry Points
 - **ConsoleClient** (`src/ConsoleClient/`) - Headless console application
 - **WebUI** (`src/WebUI/`) - Blazor web interface
-- **API** (`src/Api/`) - REST API for programmatic access  
+- **API** (`src/Api/`) - REST API for programmatic access
 - **ClientUI** (`src/ClientUI/`) - MAUI desktop/mobile application
 
 ### 2. Core Services
@@ -173,4 +173,4 @@ Garmin Connect
 ### File Cleanup
 - **Automatic cleanup** after successful upload
 - **Configurable retention** for local copies
-- **Error file preservation** for debugging 
+- **Error file preservation** for debugging

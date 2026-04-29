@@ -153,6 +153,6 @@ P2G_OBSERVABILITY__SERILOG__WRITETO__0__NAME="File"
 
 In addition to overriding config values, the following extra environment variables are also supported.
 
-| ENV Variable | Required | Default | Description | 
+| ENV Variable | Required | Default | Description |
 |:-------------|:---------|:--------|:--------------------------|
 | `P2G_CONFIG_DIRECTORY` | false | P2G Directory | Tells P2G where to look for the `configuration.local.json` file |

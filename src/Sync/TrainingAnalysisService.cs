@@ -51,8 +51,8 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 
 	public async Task<TrainingStateGetResponse> GetTrainingStateAsync()
 	{
-		// Fetch 60 days so the EMA has time to warm up before the 42-day window
-		var since = DateTime.UtcNow.AddDays(-60);
+		// Fetch 180 days: 60 for EMA warmup + 120 more for a rich class suggestion pool
+		var since = DateTime.UtcNow.AddDays(-180);
 		UserData? userData = null;
 
 		try { userData = await _pelotonService.GetUserDataAsync(); }
@@ -97,10 +97,23 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 		}
 		catch (Exception ex) { _logger.Warning(ex, "Could not fetch Garmin activities for hrTSS; falling back to discipline estimates."); }
 
-		// Derive user max HR as the highest MaxHR seen across all Garmin activities (proxy for physiological max)
-		var userMaxHR = garminActivities.Where(a => a.MaxHR > 0).Select(a => a.MaxHR!.Value).DefaultIfEmpty(0).Max();
-		_logger.Information("Training: userMaxHR={MaxHR} (derived from {Count} Garmin activities with HR data)",
-			userMaxHR, garminActivities.Count(a => a.MaxHR > 0));
+		// Derive user max HR using 90th-percentile of activity MaxHR values.
+		// Raw max is unreliable — one optical-HR artifact spike (e.g. 228 bpm) would inflate
+		// the denominator and deflate every hrTSS score. 90th-pct filters outliers while
+		// still capturing genuine peak effort.
+		var maxHrValues = garminActivities
+			.Where(a => a.MaxHR > 0)
+			.Select(a => a.MaxHR!.Value)
+			.OrderBy(v => v)
+			.ToList();
+		double userMaxHR = 0;
+		if (maxHrValues.Count > 0)
+		{
+			var p90Index = (int)Math.Ceiling(maxHrValues.Count * 0.90) - 1;
+			userMaxHR = maxHrValues[Math.Clamp(p90Index, 0, maxHrValues.Count - 1)];
+		}
+		_logger.Information("Training: userMaxHR={MaxHR} (90th-pct of {Count} Garmin activities with HR data; raw max was {RawMax})",
+			userMaxHR, maxHrValues.Count, maxHrValues.Count > 0 ? maxHrValues.Last() : 0);
 
 		// Build map of date → total TSS for that day
 		var dailyTss = BuildDailyTss(completedWorkouts, userData, garminActivities, userMaxHR);
@@ -141,13 +154,16 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 
 		var recommendation = BuildRecommendation(ctl, atl, tsb, completedWorkouts);
 
-		// Build set of ride IDs taken in the past 60 days (filter out "already done recently")
+		var cutoff60 = DateTime.UtcNow.AddDays(-60);
+
+		// Ride IDs done in the last 60 days — excluded from suggestions
 		var recentRideIds = completedWorkouts
-			.Where(w => w.Ride?.Id is not null)
+			.Where(w => w.Ride?.Id is not null
+				&& DateTimeOffset.FromUnixTimeSeconds(w.Start_Time).UtcDateTime >= cutoff60)
 			.Select(w => w.Ride!.Id)
 			.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-		var suggestedClasses = await GetSuggestedClassesAsync(recommendation.Intensity, recentRideIds);
+		var suggestedClasses = await GetSuggestedClassesAsync(recommendation.Intensity, recentRideIds, completedWorkouts);
 
 		return new TrainingStateGetResponse
 		{
@@ -219,13 +235,23 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 				}
 			}
 
-			if (match is not null && match.AverageHR > 0)
+			if (match is not null)
 			{
-				var hrRatio = match.AverageHR!.Value / userMaxHR;
-				var hrTss = (durationSec / 3600.0) * hrRatio * hrRatio * 100.0;
-				_logger.Information("hrTSS: {Discipline} on {Date} → Garmin '{Name}' delta={Delta:F1}min avgHR={HR} maxHR={Max} tss={TSS:F1}",
-					w.Fitness_Discipline, workoutStart.Date.ToString("MM-dd"), match.ActivityName, bestDelta, match.AverageHR, userMaxHR, hrTss);
-				return Math.Min(hrTss, 400);
+				// Garmin's activity list API omits averageHR for multi-sport types (Tread Bootcamp).
+				// Fall back to maxHR × 0.82 — typical avgHR/maxHR ratio for a hard-effort session.
+				double? effectiveAvgHR = match.AverageHR > 0 ? match.AverageHR
+					: match.MaxHR > 0 ? match.MaxHR!.Value * 0.82
+					: null;
+
+				if (effectiveAvgHR is not null)
+				{
+					var hrSource = match.AverageHR > 0 ? "avgHR" : $"maxHR({match.MaxHR})×0.82";
+					var hrRatio = effectiveAvgHR.Value / userMaxHR;
+					var hrTss = (durationSec / 3600.0) * hrRatio * hrRatio * 100.0;
+					_logger.Information("hrTSS: {Discipline} on {Date} → Garmin '{Name}' delta={Delta:F1}min {HrSource}={EffHR:F0} maxHR={Max} tss={TSS:F1}",
+						w.Fitness_Discipline, workoutStart.Date.ToString("MM-dd"), match.ActivityName, bestDelta, hrSource, effectiveAvgHR, userMaxHR, hrTss);
+					return Math.Min(hrTss, 400);
+				}
 			}
 
 			_logger.Information("hrTSS miss: {Discipline} on {Date:MM-dd} @ {Start:HH:mm} UTC — no Garmin match within 15 min (have {Count} candidates, closest={ClosestDelta:F1}min)",
@@ -352,64 +378,61 @@ public class TrainingAnalysisService : ITrainingAnalysisService
 
 	// ─── Class suggestions ────────────────────────────────────────────────────
 
-	private async Task<ICollection<SuggestedClassDto>> GetSuggestedClassesAsync(
-		IntensityLevelDto intensity, HashSet<string> recentRideIds)
+	private Task<ICollection<SuggestedClassDto>> GetSuggestedClassesAsync(
+		IntensityLevelDto intensity, HashSet<string> recentRideIds, IReadOnlyList<Workout> allWorkouts)
 	{
-		// Map intensity → catalog browse category, duration band, and difficulty target
-		var (browseCategory, targetDiscipline, minDurationSec, maxDurationSec, minDifficulty, maxDifficulty) = intensity switch
+		// Map intensity → target discipline slug (matches Ride.Fitness_Discipline string), duration band, difficulty range.
+		// Duration bands are generous — the key discriminator is difficulty.
+		var (targetDisciplineSlug, targetDiscipline, minDurationSec, maxDurationSec, minDifficulty, maxDifficulty) = intensity switch
 		{
-			IntensityLevelDto.VeryHard => ("running", FitnessDiscipline.Circuit, 3000, 4200, 7.5, 10.0), // 50–70 min hard bootcamp
-			IntensityLevelDto.Hard => ("running", FitnessDiscipline.Circuit, 3000, 4200, 6.5, 9.5),  // 50–70 min bootcamp
-			IntensityLevelDto.Moderate => ("cycling", FitnessDiscipline.Cycling, 2400, 3600, 5.0, 8.0),  // 40–60 min ride
-			IntensityLevelDto.Easy => ("cycling", FitnessDiscipline.Cycling, 1500, 2700, 3.0, 6.5),  // 25–45 min easy ride
-			IntensityLevelDto.Recovery => ("cycling", FitnessDiscipline.Cycling, 1500, 2700, 1.0, 5.5),  // 25–45 min recovery ride
-			IntensityLevelDto.Rest => ("stretching", FitnessDiscipline.Stretching, 300, 1800, 0.0, 10.0), // 5–30 min stretch
-			_ => ("running", FitnessDiscipline.Circuit, 3000, 4200, 5.0, 9.0),
+			IntensityLevelDto.VeryHard => ("circuit", FitnessDiscipline.Circuit, 1800, 5400, 7.5, 10.0),
+			IntensityLevelDto.Hard => ("circuit", FitnessDiscipline.Circuit, 1800, 5400, 6.0, 9.5),
+			IntensityLevelDto.Moderate => ("cycling", FitnessDiscipline.Cycling, 1200, 4200, 4.0, 8.5),
+			IntensityLevelDto.Easy => ("cycling", FitnessDiscipline.Cycling, 900, 3600, 2.0, 6.5),
+			IntensityLevelDto.Recovery => ("cycling", FitnessDiscipline.Cycling, 900, 3600, 0.0, 5.5),
+			IntensityLevelDto.Rest => ("stretching", FitnessDiscipline.Stretching, 300, 3600, 0.0, 10.0),
+			_ => ("circuit", FitnessDiscipline.Circuit, 1800, 5400, 5.0, 9.0),
 		};
 
-		try
+		// Build a de-duplicated pool of unique rides from the 180-day workout history,
+		// excluding classes done in the last 60 days so the suggestion feels fresh.
+		var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var candidateRides = new List<Ride>();
+
+		foreach (var w in allWorkouts.OrderByDescending(w => w.Start_Time))
 		{
-			// Pull from Peloton catalog — broad fetch so we have enough to filter by duration/difficulty
-			var rides = await _pelotonService.GetCatalogClassesAsync(browseCategory, 100);
-
-			_logger.Information("Catalog: fetched {Total} rides for category '{Category}'; filtering dur=[{Min},{Max}]s diff=[{DiffMin:F1},{DiffMax:F1}]",
-				rides.Count, browseCategory, minDurationSec, maxDurationSec, minDifficulty, maxDifficulty);
-
-			var filtered = rides
-				.Where(r =>
-					r.Id is not null
-					&& !recentRideIds.Contains(r.Id)
-					&& (r.Duration ?? 0) >= minDurationSec
-					&& (r.Duration ?? 0) <= maxDurationSec
-					&& r.Difficulty_Estimate >= minDifficulty
-					&& r.Difficulty_Estimate <= maxDifficulty
-					&& !r.Is_Archived)
-				.ToList();
-
-			_logger.Information("Catalog: {Count} rides passed filters", filtered.Count);
-
-			return filtered
-				.OrderByDescending(r => r.Overall_Estimate)
-				.Take(6)
-				.Select(r => new SuggestedClassDto
-				{
-					Id = r.Id,
-					Title = r.Title ?? string.Empty,
-					Instructor = r.Instructor?.Name ?? string.Empty,
-					DurationMinutes = (r.Duration ?? minDurationSec) / 60,
-					DifficultyScore = Math.Round(r.Difficulty_Estimate, 1),
-					EstimatedCalories = (int)(r.Estimated_Calories_Output ?? 0),
-					ImageUrl = r.Image_Url?.ToString() ?? string.Empty,
-					Discipline = r.Fitness_Discipline_Display_Name ?? FriendlyDiscipline(targetDiscipline),
-					PelotonUrl = PelotonClassUrl(targetDiscipline, r.Id),
-				})
-				.ToList();
+			var ride = w.Ride;
+			if (ride?.Id is null) continue;
+			if (recentRideIds.Contains(ride.Id)) continue;
+			if (!seenIds.Add(ride.Id)) continue;
+			// Archived = retired from Peloton's browse catalog but content still accessible; include it.
+			if (!string.Equals(ride.Fitness_Discipline, targetDisciplineSlug, StringComparison.OrdinalIgnoreCase)) continue;
+			if ((ride.Duration ?? 0) < minDurationSec || (ride.Duration ?? 0) > maxDurationSec) continue;
+			if (ride.Difficulty_Estimate < minDifficulty || ride.Difficulty_Estimate > maxDifficulty) continue;
+			candidateRides.Add(ride);
 		}
-		catch (Exception ex)
-		{
-			_logger.Warning(ex, "Could not fetch class suggestions from Peloton catalog (category={Category}): {Message}", browseCategory, ex.Message);
-			return Array.Empty<SuggestedClassDto>();
-		}
+
+		_logger.Information("Suggestions: intensity={Intensity} discipline={Discipline} dur=[{Min},{Max}]s diff=[{DMin:F1},{DMax:F1}] — {Pool} candidates from 180-day history",
+					intensity, targetDisciplineSlug, minDurationSec, maxDurationSec, minDifficulty, maxDifficulty, candidateRides.Count);
+
+		ICollection<SuggestedClassDto> result = candidateRides
+			.OrderByDescending(r => r.Overall_Estimate)
+			.Take(6)
+			.Select(r => new SuggestedClassDto
+			{
+				Id = r.Id,
+				Title = r.Title ?? string.Empty,
+				Instructor = r.Instructor?.Name ?? string.Empty,
+				DurationMinutes = (r.Duration ?? minDurationSec) / 60,
+				DifficultyScore = Math.Round(r.Difficulty_Estimate, 1),
+				EstimatedCalories = (int)(r.Estimated_Calories_Output ?? 0),
+				ImageUrl = r.Image_Url?.ToString() ?? string.Empty,
+				Discipline = r.Fitness_Discipline_Display_Name ?? FriendlyDiscipline(targetDiscipline),
+				PelotonUrl = PelotonClassUrl(targetDiscipline, r.Id),
+			})
+			.ToList();
+
+		return Task.FromResult(result);
 	}
 
 	// ─── Helpers ─────────────────────────────────────────────────────────────

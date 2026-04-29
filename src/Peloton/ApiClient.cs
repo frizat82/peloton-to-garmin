@@ -205,19 +205,21 @@ namespace Peloton
 		public async Task<PelotonResponse<Ride>> GetCatalogClassesAsync(string browseCategory, int limit)
 		{
 			var auth = await GetAuthAsync();
-			return await $"{BaseUrl}/v3/ride/content"
+			// /v2/ride/filter is the Peloton catalog browse endpoint.
+			// sort_by=difficulty_estimate is valid but slow (~10-15s); original_air_time is NOT valid (404).
+			// Use 60s timeout and a modest limit to avoid server-side query stalls.
+			return await $"{BaseUrl}/v2/ride/filter"
 				.WithOAuthBearerToken(auth.Token.AccessToken)
 				.WithCommonHeaders()
 				.SetQueryParams(new
 				{
 					browse_category = browseCategory,
-					content_format = "audio,video",
-					limit = limit,
+					limit = Math.Min(limit, 30),
 					page = 0,
-					sort_by = "original_air_time",
+					sort_by = "difficulty_estimate",
 					joins = "ride.instructor"
 				})
-				.WithTimeout(30)
+				.WithTimeout(60)
 				.GetJsonAsync<PelotonResponse<Ride>>();
 		}
 	}

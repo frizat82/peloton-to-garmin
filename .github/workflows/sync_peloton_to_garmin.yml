@@ -22,7 +22,7 @@ jobs:
   sync:
     name: 🔄 Sync
     runs-on: ubuntu-latest
-    container: 
+    container:
       image:  philosowaffle/peloton-to-garmin:console-stable
       options: --user root
     steps:
@@ -34,7 +34,7 @@ jobs:
       env:
         DEFAULT_WORKOUT_NUM: 5
       run: |
-        cat <<EOT > /app/configuration.local.json 
+        cat <<EOT > /app/configuration.local.json
         {
           "App": {
             "EnablePolling": false,
@@ -74,7 +74,7 @@ jobs:
           }
         }
         EOT
-    
+
     - name: ▶ Run P2G Sync
       run: /app/ConsoleClient
       if: ${{ env.P2G_PELOTON__EMAIL && env.P2G_PELOTON__PASSWORD && env.P2G_GARMIN__EMAIL && env.P2G_GARMIN__PASSWORD }}

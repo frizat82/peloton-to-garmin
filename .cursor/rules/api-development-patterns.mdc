@@ -27,9 +27,9 @@ When working with API controllers, follow the established patterns documented in
 return Ok(new { isSuccess = true, data = result });
 
 // Error response
-return BadRequest(new { 
-    error = new { 
-        code = "VALIDATION_ERROR", 
+return BadRequest(new {
+    error = new {
+        code = "VALIDATION_ERROR",
         message = "Error description",
         details = new[] { "Specific error details" }
     }

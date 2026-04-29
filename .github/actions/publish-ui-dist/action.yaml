@@ -25,7 +25,7 @@ runs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
-    
+
     - name: 📃 List SDKs
       run: dotnet --list-sdks
       shell: pwsh
@@ -54,7 +54,7 @@ runs:
     - name: 🧹 Dotnet Clean
       run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
       shell: pwsh
-    
+
     - name: 🎨 Dotnet Restore
       run: dotnet restore
       shell: pwsh
@@ -63,7 +63,7 @@ runs:
     - name: 📢 Publish ${{ inputs.os }}
       run: dotnet publish ${{ github.workspace }}/src/ClientUI/ClientUI.csproj -c Release -f ${{ inputs.framework }} -p:RuntimeIdentifierOverride=${{ inputs.os }} -p:PublishSingleFile=true -p:SelfContained=true
       shell: pwsh
-    
+
     - name: 📃 Log Dependencies
       run: dotnet list package --include-transitive
       shell: pwsh

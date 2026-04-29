@@ -1,7 +1,7 @@
 
 # Windows
 
-P2G provides a Windows application available for download. When you download the application, everything P2G needs to run is self-contained in the folder you downloaded.  This includes all of your settings and other configuration files.  
+P2G provides a Windows application available for download. When you download the application, everything P2G needs to run is self-contained in the folder you downloaded.  This includes all of your settings and other configuration files.
 
 For this reason,
 

@@ -15,7 +15,7 @@ services:
       - ./config/api/:/app/config
       - ./data:/app/data # recommended for saving settings across restarts
       - ./output:/app/output # optional, if you want access to the generated workout and log files
-  
+
   p2g-webui:
     container_name: p2g-webui
     image: philosowaffle/peloton-to-garmin:webui-stable

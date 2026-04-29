@@ -28,7 +28,7 @@ Version 2 will not interfere with your Version 1 install, so if anything doesn't
 [PELOTON]
 Email = pelotonEmail@example.com
 Password = pelotonPassword
-WorkoutTypes = cycling, strength 
+WorkoutTypes = cycling, strength
 ```
 
 | Property      | New Config       | Notes |

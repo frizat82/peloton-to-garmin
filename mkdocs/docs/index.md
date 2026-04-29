@@ -1,4 +1,4 @@
-# 👋 Hello! 
+# 👋 Hello!
 
 P2G is an application that syncs your Peloton workouts to Garmin for free.  It does a few other things too🙂
 

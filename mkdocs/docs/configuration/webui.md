@@ -10,7 +10,7 @@ The Web UI looks for a file named `configuration.local.json` in the same directo
 
 ```json linenums="1"
 {
-  "Api": { /** (1)! **/ }, 
+  "Api": { /** (1)! **/ },
   "WebUI": { /** (2)! **/ },
   "Observability": { /** (3)! **/ }
 }

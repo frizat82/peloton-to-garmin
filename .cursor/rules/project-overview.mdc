@@ -8,7 +8,7 @@ This is a .NET 9.0 application that syncs Peloton workout data to Garmin Connect
 
 ## Key Components:
 - **API** (`src/Api/`): REST API for programmatic access
-- **WebUI** (`src/WebUI/`): Blazor-based web interface  
+- **WebUI** (`src/WebUI/`): Blazor-based web interface
 - **ClientUI** (`src/ClientUI/`): MAUI-based desktop application
 - **ConsoleClient** (`src/ConsoleClient/`): Headless console application
 - **Sync Service** (`src/Sync/`): Core synchronization logic

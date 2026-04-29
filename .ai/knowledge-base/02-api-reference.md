@@ -306,4 +306,4 @@ The API includes Swagger documentation available at `/swagger` when running in d
 ### Metrics
 - **Endpoint**: `/metrics` (if Prometheus enabled)
 - **Method**: GET
-- **Response**: Prometheus metrics format 
+- **Response**: Prometheus metrics format

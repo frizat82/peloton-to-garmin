@@ -12,7 +12,7 @@
   Rowing
   Strength
   Stretching
-  TreadmillRunning 
+  TreadmillRunning
   TreadmillWalking
   Yoga
 ```

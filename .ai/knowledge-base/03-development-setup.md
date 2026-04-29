@@ -378,4 +378,4 @@ dotnet build --configuration Release
 ### Community
 - [GitHub Issues](https://github.com/philosowaffle/peloton-to-garmin/issues)
 - [GitHub Discussions](https://github.com/philosowaffle/peloton-to-garmin/discussions)
-- [Project Wiki](https://philosowaffle.github.io/peloton-to-garmin) 
+- [Project Wiki](https://philosowaffle.github.io/peloton-to-garmin)

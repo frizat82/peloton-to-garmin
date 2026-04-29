@@ -42,7 +42,7 @@ nav:
     - 'Windows App': install/windows.md
     - Source: install/source.md
     - 'GitHub Actions': install/github-action.md
- - Configuration: 
+ - Configuration:
     - Configuration: configuration/index.md
     - Settings:
       - 'App Settings': configuration/app.md

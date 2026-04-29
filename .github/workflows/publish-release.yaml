@@ -32,10 +32,10 @@ jobs:
               majorVersionTag: webui-v${{ github.event.inputs.majorVersion }}
 
    steps:
-    
+
       - name: ⤵ Checkout the code
         uses: actions/checkout@v4
-        
+
       - name: 📢 Publish Docker Images
         uses: ./.github/actions/publish-docker-images
         with:
@@ -70,7 +70,7 @@ jobs:
           dotnet-version: ${{ matrix.dotnet }}
           os: ${{ matrix.os }}
           framework: ${{ matrix.framework }}
-  
+
   create-gh-release:
     name: 📢 Publish GH Release
     runs-on: ubuntu-latest
@@ -101,7 +101,7 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           bodyFile:  ${{ github.workspace }}/vNextReleaseNotes.md
-  
+
   publish-gh-pages:
     name: 📢 Publish GH Pages
     runs-on: ubuntu-latest

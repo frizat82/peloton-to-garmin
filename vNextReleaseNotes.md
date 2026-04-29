@@ -26,4 +26,3 @@
     - `webui-latest`
     - `webui-v6.0.0`
     - `webui-v6`
-

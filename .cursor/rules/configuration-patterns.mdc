@@ -49,12 +49,12 @@ P2G_PELOTON_EMAIL=user@example.com  # Wrong separator
 public class MyService
 {
     private readonly ISettingsService _settingsService;
-    
+
     public MyService(ISettingsService settingsService)
     {
         _settingsService = settingsService;
     }
-    
+
     public async Task DoWorkAsync()
     {
         var settings = await _settingsService.GetSettingsAsync();
