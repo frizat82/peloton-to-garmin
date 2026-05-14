@@ -3,19 +3,13 @@ name: PR Check ✔
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ master, v5-wip ]
+    branches: [ master ]
 
 jobs:
 
   build-and-test:
     name: ⚒🧪 Build and Test the code
-    strategy:
-      matrix:
-        dotnet: ['9.0.101']
-        os: [windows-latest]
-        framework: ['net9.0-windows10.0.19041.0']
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
     - name: ⤵ Checkout the code
@@ -24,18 +18,7 @@ jobs:
     - name: 💾 Install dotnet
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: ${{ matrix.dotnet }}
-
-    - name: 📃 List SDKs
-      run: dotnet --list-sdks
-
-    - name: 🎨 Restore MAUI Workloads
-      run: dotnet workload restore
-      shell: pwsh
-
-    - name: 📃 List MAUI Workloads
-      run: dotnet workload list
-      shell: pwsh
+        dotnet-version: '9.0.101'
 
     - name: 🧹 Dotnet Clean
       run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
