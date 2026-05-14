@@ -59,7 +59,7 @@ namespace Api.Controllers
 				return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 			}
 
-			var syncedIds = await _syncedWorkoutsDb.GetSyncedWorkoutIdsAsync();
+			var syncedIds = await _syncedWorkoutsDb.GetSyncedWorkoutIdsAsync() ?? new HashSet<string>();
 
 			var items = recentWorkouts.data
 				.OrderByDescending(i => i.Created_At)

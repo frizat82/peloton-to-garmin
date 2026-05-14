@@ -360,7 +360,7 @@ namespace Sync
 
 			var completedWorkouts = FilterToCompletedWorkoutIds(recentWorkouts);
 
-			var syncedIds = await _syncedWorkoutsDb.GetSyncedWorkoutIdsAsync();
+			var syncedIds = await _syncedWorkoutsDb.GetSyncedWorkoutIdsAsync() ?? new HashSet<string>();
 			var unsynced = completedWorkouts.Where(id => !syncedIds.Contains(id)).ToList();
 
 			var completedWorkoutsCount = unsynced.Count;
