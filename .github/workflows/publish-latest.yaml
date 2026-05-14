@@ -40,24 +40,3 @@ jobs:
                 dockerfile: ${{ matrix.dockerfile }}
                 tag: ${{ matrix.tag }}
                 github_token: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-ui-dist:
-    name: 📢 Publish UI Distribution
-    runs-on: 'windows-latest'
-    strategy:
-      matrix:
-        dotnet: [ '9.0.101' ]
-        framework: ['net9.0-windows10.0.19041.0']
-        os: [ 'win-x64' ]
-
-    steps:
-
-      - name: ⤵ Checkout the code
-        uses: actions/checkout@v3
-
-      - name: 📢 Publish UI Distribution
-        uses: ./.github/actions/publish-ui-dist
-        with:
-          dotnet-version: ${{ matrix.dotnet }}
-          os: ${{ matrix.os }}
-          framework: ${{ matrix.framework }}
