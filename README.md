@@ -51,7 +51,7 @@ cd p2g
 services:
   p2g-api:
     container_name: p2g-api
-    image: philosowaffle/peloton-to-garmin:api-stable
+    image: ghcr.io/frizat82/peloton-to-garmin:api-latest
     user: :p2g
     environment:
       - TZ=America/Chicago        # set your local timezone
@@ -65,7 +65,7 @@ services:
 
   p2g-webui:
     container_name: p2g-webui
-    image: philosowaffle/peloton-to-garmin:webui-stable
+    image: ghcr.io/frizat82/peloton-to-garmin:webui-latest
     user: :p2g
     ports:
       - 8002:8080
