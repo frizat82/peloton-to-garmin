@@ -10,6 +10,7 @@ using Moq.AutoMock;
 using NUnit.Framework;
 using Peloton;
 using Peloton.Dto;
+using Sync.Database;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -58,6 +59,9 @@ namespace UnitTests.Api.Controllers
 			var autoMocker = new AutoMocker();
 			var controller = autoMocker.CreateInstance<PelotonWorkoutsController>();
 			var service = autoMocker.GetMock<IPelotonService>();
+			autoMocker.GetMock<ISyncedWorkoutsDb>()
+				.Setup(x => x.GetSyncedWorkoutIdsAsync())
+				.ReturnsAsync(new HashSet<string>());
 
 			var results = new PagedPelotonResponse<Workout>()
 			{
@@ -97,6 +101,9 @@ namespace UnitTests.Api.Controllers
 			var autoMocker = new AutoMocker();
 			var controller = autoMocker.CreateInstance<PelotonWorkoutsController>();
 			var service = autoMocker.GetMock<IPelotonService>();
+			autoMocker.GetMock<ISyncedWorkoutsDb>()
+				.Setup(x => x.GetSyncedWorkoutIdsAsync())
+				.ReturnsAsync(new HashSet<string>());
 
 			var results = new PagedPelotonResponse<Workout>()
 			{
