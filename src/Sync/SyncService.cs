@@ -38,16 +38,18 @@ namespace Sync
 		private readonly IGarminActivityEnrichmentService _enrichmentService;
 		private readonly IEnumerable<IConverter> _converters;
 		private readonly ISyncStatusDb _db;
+		private readonly ISyncedWorkoutsDb _syncedWorkoutsDb;
 		private readonly IFileHandling _fileHandler;
 		private readonly ISettingsService _settingsService;
 
-		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IGarminActivityEnrichmentService enrichmentService, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, IFileHandling fileHandler)
+		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IGarminActivityEnrichmentService enrichmentService, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, ISyncedWorkoutsDb syncedWorkoutsDb, IFileHandling fileHandler)
 		{
 			_settingsService = settingService;
 			_pelotonService = pelotonService;
 			_garminUploader = garminUploader;
 			_enrichmentService = enrichmentService;
 			_converters = converters;
+			_syncedWorkoutsDb = syncedWorkoutsDb;
 			_db = dbClient;
 			_fileHandler = fileHandler;
 		}
@@ -267,6 +269,7 @@ namespace Sync
 			}
 
 			response.SyncSuccess = true;
+			await _syncedWorkoutsDb.MarkSyncedAsync(workoutIds);
 			return response;
 		}
 
@@ -357,11 +360,15 @@ namespace Sync
 
 			var completedWorkouts = FilterToCompletedWorkoutIds(recentWorkouts);
 
-			var completedWorkoutsCount = completedWorkouts.Count();
-			_logger.Information("Found {@NumWorkouts} completed workouts.", completedWorkoutsCount);
+			var syncedIds = await _syncedWorkoutsDb.GetSyncedWorkoutIdsAsync();
+			var unsynced = completedWorkouts.Where(id => !syncedIds.Contains(id)).ToList();
+
+			var completedWorkoutsCount = unsynced.Count;
+			_logger.Information("Found {@NumWorkouts} completed workouts ({@Skipped} already synced, skipping).",
+				completedWorkoutsCount, completedWorkouts.Count() - completedWorkoutsCount);
 			activity?.AddTag("workouts.completed", completedWorkoutsCount);
 
-			var result = await SyncAsync(completedWorkouts, settings.Peloton.ExcludeWorkoutTypes, forceStackClasses);
+			var result = await SyncAsync(unsynced, settings.Peloton.ExcludeWorkoutTypes, forceStackClasses);
 
 			if (result.SyncSuccess)
 				syncTime.LastSuccessfulSyncTime = DateTime.Now;

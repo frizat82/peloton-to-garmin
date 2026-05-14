@@ -7,6 +7,7 @@ public class PelotonWorkoutsGetRequest : IPagingRequest
 {
 	public int PageSize { get; set; }
 	public int PageIndex { get; set; }
+	public bool HideSynced { get; set; } = false;
 }
 
 public class PelotonWorkoutsGetResponse : PagingResponseBase<PelotonWorkout>
@@ -79,6 +80,7 @@ public record PelotonWorkout
 	public string? Name { get; init; }
 	public long CreatedAt { get; init; }
 	public Uri? ImageUrl { get; set; }
+	public bool IsSynced { get; set; }
 
 }
 

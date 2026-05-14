@@ -6,6 +6,7 @@ using Flurl.Http;
 using Microsoft.AspNetCore.Mvc;
 using Peloton;
 using Peloton.Dto;
+using Sync.Database;
 
 namespace Api.Controllers
 {
@@ -15,10 +16,12 @@ namespace Api.Controllers
 	public class PelotonWorkoutsController : Controller
 	{
 		private readonly IPelotonService _pelotonService;
+		private readonly ISyncedWorkoutsDb _syncedWorkoutsDb;
 
-		public PelotonWorkoutsController(IPelotonService pelotonService)
+		public PelotonWorkoutsController(IPelotonService pelotonService, ISyncedWorkoutsDb syncedWorkoutsDb)
 		{
 			_pelotonService = pelotonService;
+			_syncedWorkoutsDb = syncedWorkoutsDb;
 		}
 
 		/// <summary>
@@ -56,16 +59,21 @@ namespace Api.Controllers
 				return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
 			}
 
+			var syncedIds = await _syncedWorkoutsDb.GetSyncedWorkoutIdsAsync();
+
+			var items = recentWorkouts.data
+				.OrderByDescending(i => i.Created_At)
+				.Select(w => { var pw = new PelotonWorkout(w); pw.IsSynced = syncedIds.Contains(w.Id ?? string.Empty); return pw; })
+				.Where(w => !request.HideSynced || !w.IsSynced)
+				.ToList();
+
 			return new PelotonWorkoutsGetResponse()
 			{
 				PageSize = recentWorkouts.Limit,
 				PageIndex = recentWorkouts.Page,
 				PageCount = recentWorkouts.Page_Count,
 				TotalItems = recentWorkouts.Total,
-				Items = recentWorkouts.data
-						.OrderByDescending(i => i.Created_At)
-						.Select(w => new PelotonWorkout(w))
-						.ToList()
+				Items = items
 			};
 		}
 
