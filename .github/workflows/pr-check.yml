@@ -75,6 +75,8 @@ jobs:
     name: 📢 Publish Docker Images
     runs-on: ubuntu-latest
     needs: build-and-test
+    permissions:
+      packages: write
     strategy:
       matrix:
           dockerfile: ['Dockerfile.console', 'Dockerfile.api', 'Dockerfile.webui']
@@ -96,6 +98,4 @@ jobs:
       with:
         dockerfile: ${{ matrix.dockerfile }}
         tag: ${{ matrix.tag }}
-        secret_docker_username: ${{ secrets.DOCKER_USERNAME }}
-        secret_docker_password: ${{ secrets.DOCKER_PASSWORD }}
-        secret_github_package: ${{ secrets.GH_PACKAGE_SECRET}}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
