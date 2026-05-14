@@ -30,9 +30,11 @@
                         </HxPopover>
 					</TextTemplate>
 				</HxSwitch>
-
 			</div>
 			<div class="col-md-4">
+				<HxSwitch Value="hideSynced" ValueChanged="@OnHideSyncedChanged" Inline="true">
+					<TextTemplate>Hide already synced</TextTemplate>
+				</HxSwitch>
 			</div>
 			<div class="col-md-4 text-end">
 				@if (_garminEnrichEnabled)
@@ -112,13 +114,21 @@ else if (_previewItems != null)
 	</HxCard>
 }
 
-<HxGrid TItem="PelotonWorkout" MultiSelectionEnabled="true" Responsive="true" DataProvider="LoadDataAsync" @bind-SelectedDataItems="selectedItems" PageSize="PageSize" SelectionEnabled="false">
+<HxGrid TItem="PelotonWorkout" MultiSelectionEnabled="true" Responsive="true" DataProvider="LoadDataAsync" @bind-SelectedDataItems="selectedItems" PageSize="PageSize" SelectionEnabled="false" @ref="_grid">
 	<Columns>
 		<HxGridColumn TItem="PelotonWorkout" HeaderText="Date" ItemTextSelector="@(item => DateTimeOffset.FromUnixTimeSeconds(item.CreatedAt).LocalDateTime.ToString())" />
 		<HxGridColumn TItem="PelotonWorkout" HeaderText="Title" ItemTextSelector="@(item => item.WorkoutTitle ?? item.Name)" />
 		<HxGridColumn TItem="PelotonWorkout" HeaderText="Instructor" ItemTextSelector="@(item => item.InstructorName)" />
 		<HxGridColumn TItem="PelotonWorkout" HeaderText="Workout Type" ItemTextSelector="@(item => item.PelotonFitnessDiscipline)" />
 		<HxGridColumn TItem="PelotonWorkout" HeaderText="Is Outdoor?" ItemTextSelector="@(item => item.IsOutdoor.ToString())" />
+		<HxGridColumn TItem="PelotonWorkout" HeaderText="Synced?">
+			<ItemTemplate>
+				@if (context.IsSynced)
+				{
+					<HxBadge Color="ThemeColor.Success">Synced</HxBadge>
+				}
+			</ItemTemplate>
+		</HxGridColumn>
 	</Columns>
 </HxGrid>
 
@@ -128,12 +138,14 @@ else if (_previewItems != null)
 	private static int PageSize = 25;
 	private bool PelotonSettingNotConfiguredYet = false;
 	private bool forceStackWorkouts = false;
+	private bool hideSynced = false;
 	private bool _garminEnrichEnabled = false;
 	private ICollection<GarminMergePreviewItem>? _previewItems;
 	private bool _previewLoading = false;
 	private ICollection<SyncMergeResultItem>? _lastSyncMergeResults;
 
 	private GarminMfaModal? _garminMfaModal;
+	private HxGrid<PelotonWorkout>? _grid;
 
 	public Sync() : base(nameof(Sync)) => _toaster?.Clear();
 
@@ -164,7 +176,7 @@ else if (_previewItems != null)
 		try
 		{
 			var pageIndex = request.StartIndex / PageSize;
-			var recentWorkouts = await _apiClient.PelotonWorkoutsGetAsync(new PelotonWorkoutsGetRequest() { PageSize = PageSize, PageIndex = pageIndex });
+			var recentWorkouts = await _apiClient.PelotonWorkoutsGetAsync(new PelotonWorkoutsGetRequest() { PageSize = PageSize, PageIndex = pageIndex, HideSynced = hideSynced });
 			return new GridDataProviderResult<PelotonWorkout>() { Data = recentWorkouts.Items, TotalCount = recentWorkouts.TotalItems };
 		}
 		catch (ApiClientException e)
@@ -289,6 +301,14 @@ else if (_previewItems != null)
 			_toaster.AddError($"Failed to sync - {e.Message} - See logs for details.");
 			Log.Error("UI - Failed to sync.", e);
 		}
+	}
+
+	private async Task OnHideSyncedChanged(bool value)
+	{
+		hideSynced = value;
+		selectedItems.Clear();
+		if (_grid is not null)
+			await _grid.RefreshDataAsync();
 	}
 
 	private bool IsSyncButtonEnabled()

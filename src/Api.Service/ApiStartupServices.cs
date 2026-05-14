@@ -65,6 +65,7 @@ public static class ApiStartupServices
 
 		// SYNC
 		services.AddSingleton<ISyncStatusDb, SyncStatusDb>();
+		services.AddSingleton<ISyncedWorkoutsDb, SyncedWorkoutsDb>();
 		services.AddSingleton<ISyncService, SyncService>();
 
 		// SYSTEM INFO
