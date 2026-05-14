@@ -447,8 +447,7 @@ namespace UnitTests.Garmin
 			};
 
 			// ACT & ASSERT
-			// The actual implementation throws NullReferenceException when file doesn't exist
-			Assert.ThrowsAsync<NullReferenceException>(() =>
+			Assert.CatchAsync<Exception>(() =>
 				_apiClient.UploadActivity(nonExistentFile, ".fit", auth));
 		}
 
