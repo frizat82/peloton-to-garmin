@@ -88,6 +88,41 @@ Then open `http://localhost:8002` in your browser to configure your Peloton and 
 
 > **Note:** The WebUI and GitHub Actions deployment methods store credentials encrypted at rest. See the [Warnings](#warnings) section below for the Console/headless deployment caveat.
 
+## Local Development
+
+Both the **API** and **WebUI** must run together — the WebUI is a Blazor frontend that calls the API for all data.
+
+### Docker Compose (quickest)
+
+The easiest way to run locally is with the pre-built images from GHCR. See the [Quick Start with Docker Compose](#quick-start-with-docker-compose) section above — just run `docker compose up -d` and open `http://localhost:8002`.
+
+A sample compose file and config templates are also available under `docker/webui/`.
+
+### VS Code
+
+**Ports:** API on `http://localhost:8031`, WebUI on `http://localhost:8041`
+
+Use the compound launch configuration **`Api + WebUI`** (defined in `.vscode/launch.json`) to start both services in one step:
+
+1. Open the Run & Debug panel (`Ctrl+Shift+D`)
+2. Select **`Api + WebUI`** from the dropdown
+3. Press **Start** (F5)
+4. Open `http://localhost:8041` in your browser
+
+### Command line
+
+Run each in a separate terminal:
+
+```bash
+# Terminal 1 — API
+dotnet run --project src/Api/Api.csproj --no-launch-profile
+
+# Terminal 2 — WebUI
+dotnet run --project src/WebUI/WebUI.csproj --no-launch-profile
+```
+
+Then open `http://localhost:8041`.
+
 ## Contributors
 
 Special thanks to all the [contributors](https://github.com/philosowaffle/peloton-to-garmin/graphs/contributors) who have helped improve this project!
