@@ -92,11 +92,15 @@ Then open `http://localhost:8002` in your browser to configure your Peloton and 
 
 Both the **API** and **WebUI** must run together — the WebUI is a Blazor frontend that calls the API for all data.
 
-**Ports (local dev defaults):**
-- API: `http://localhost:8031`
-- WebUI: `http://localhost:8041`
+### Docker Compose (quickest)
+
+The easiest way to run locally is with the pre-built images from GHCR. See the [Quick Start with Docker Compose](#quick-start-with-docker-compose) section above — just run `docker compose up -d` and open `http://localhost:8002`.
+
+A sample compose file and config templates are also available under `docker/webui/`.
 
 ### VS Code
+
+**Ports:** API on `http://localhost:8031`, WebUI on `http://localhost:8041`
 
 Use the compound launch configuration **`Api + WebUI`** (defined in `.vscode/launch.json`) to start both services in one step:
 
