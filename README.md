@@ -38,27 +38,11 @@ sudo usermod -aG p2g $USER
 # Log out and back in for the group change to take effect
 ```
 
-**2. Create the directory structure and required config files:**
+**2. Create the directory structure:**
 
 ```bash
 mkdir -p p2g/config/api p2g/config/webui p2g/data p2g/output
 cd p2g
-```
-
-Create `config/webui/configuration.local.json` — this tells the WebUI where to find the API:
-
-```json
-{
-  "Api": {
-    "HostUrl": "http://p2g-api:8080"
-  }
-}
-```
-
-Create `config/api/configuration.local.json` — minimal config for the API:
-
-```json
-{}
 ```
 
 **3. Create `docker-compose.yaml`:**
@@ -88,6 +72,7 @@ services:
     environment:
       - TZ=America/Chicago
       - P2G_CONFIG_DIRECTORY=/app/config
+      - P2G_Api__HostUrl=http://p2g-api:8080
     volumes:
       - ./config/webui:/app/config
     depends_on:

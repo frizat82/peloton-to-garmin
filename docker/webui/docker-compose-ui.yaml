@@ -25,6 +25,7 @@ services:
     environment:
       - TZ=America/Chicago
       - P2G_CONFIG_DIRECTORY=/app/config
+      - P2G_Api__HostUrl=http://p2g-api:8080
     volumes:
       - ./config/webui:/app/config
     depends_on:
