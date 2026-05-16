@@ -156,3 +156,4 @@ In addition to overriding config values, the following extra environment variabl
 | ENV Variable | Required | Default | Description |
 |:-------------|:---------|:--------|:--------------------------|
 | `P2G_CONFIG_DIRECTORY` | false | P2G Directory | Tells P2G where to look for the `configuration.local.json` file |
+| `P2G_Api__HostUrl` | false | null | (WebUI only) The URL of the P2G API — useful in Docker Compose to avoid needing a config file |

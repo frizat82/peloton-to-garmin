@@ -34,6 +34,12 @@ This section helps inform the Web UI where to find the P2G Api.
 |:-----------|:---------|:--------|:--------------------|:------------|
 | HostUrl | yes | `null` | none | The host and port for the Web UI to communicate with the Api. |
 
+!!! tip
+    When running via Docker Compose you can set this with an environment variable instead of a config file:
+    ```
+    P2G_Api__HostUrl=http://p2g-api:8080
+    ```
+
 ## Web UI Config
 
 !!! warning
