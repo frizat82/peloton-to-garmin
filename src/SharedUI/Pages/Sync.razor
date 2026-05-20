@@ -32,7 +32,7 @@
 				</HxSwitch>
 			</div>
 			<div class="col-md-4">
-				<HxSwitch Value="hideSynced" ValueChanged="@OnHideSyncedChanged" Inline="true">
+				<HxSwitch @bind-Value="hideSynced" @bind-Value:after="RefreshGridAsync" Inline="true">
 					<TextTemplate>Hide already synced</TextTemplate>
 				</HxSwitch>
 			</div>
@@ -303,9 +303,8 @@ else if (_previewItems != null)
 		}
 	}
 
-	private async Task OnHideSyncedChanged(bool value)
+	private async Task RefreshGridAsync()
 	{
-		hideSynced = value;
 		selectedItems.Clear();
 		if (_grid is not null)
 			await _grid.RefreshDataAsync();
