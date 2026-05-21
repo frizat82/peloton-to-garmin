@@ -4,35 +4,36 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release Version'
+        description: 'Release Version (e.g. 1.0.0)'
         required: true
       majorVersion:
-        description: 'Major Version Tag'
+        description: 'Major Version Tag (e.g. 1)'
         required: true
 
 jobs:
   publish-docker-images:
-   name: 📢 Publish Docker Images
-   runs-on: ubuntu-latest
-   strategy:
-    matrix:
+    name: 📢 Publish Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
         dockerfile: ['Dockerfile.console', 'Dockerfile.api', 'Dockerfile.webui']
         include:
-            - dockerfile: 'Dockerfile.console'
-              tag: console-stable
-              versionTag: console-v${{ github.event.inputs.version }}
-              majorVersionTag: console-v${{ github.event.inputs.majorVersion }}
-            - dockerfile: 'Dockerfile.api'
-              tag: api-stable
-              versionTag: api-v${{ github.event.inputs.version }}
-              majorVersionTag: api-v${{ github.event.inputs.majorVersion }}
-            - dockerfile: 'Dockerfile.webui'
-              tag: webui-stable
-              versionTag: webui-v${{ github.event.inputs.version }}
-              majorVersionTag: webui-v${{ github.event.inputs.majorVersion }}
+          - dockerfile: 'Dockerfile.console'
+            tag: console-stable
+            versionTag: console-v${{ github.event.inputs.version }}
+            majorVersionTag: console-v${{ github.event.inputs.majorVersion }}
+          - dockerfile: 'Dockerfile.api'
+            tag: api-stable
+            versionTag: api-v${{ github.event.inputs.version }}
+            majorVersionTag: api-v${{ github.event.inputs.majorVersion }}
+          - dockerfile: 'Dockerfile.webui'
+            tag: webui-stable
+            versionTag: webui-v${{ github.event.inputs.version }}
+            majorVersionTag: webui-v${{ github.event.inputs.majorVersion }}
 
-   steps:
-
+    steps:
       - name: ⤵ Checkout the code
         uses: actions/checkout@v4
 
@@ -43,93 +44,23 @@ jobs:
           tag: ${{ matrix.tag }}
           version_tag: ${{ matrix.versionTag }}
           major_version_tag: ${{ matrix.majorVersionTag }}
-          secret_docker_username: ${{ secrets.DOCKER_USERNAME }}
-          secret_docker_password: ${{ secrets.DOCKER_PASSWORD }}
-          secret_github_package: ${{ secrets.GH_PACKAGE_SECRET}}
-
-  publish-ui-dist:
-    name: 📢 Publish UI Distribution
-    runs-on: 'windows-latest'
-    outputs:
-      artifact_name: ${{ steps.win-ui-create-artifact.outputs.artifact_name }}
-    strategy:
-      matrix:
-        dotnet: [ '9.0.101' ]
-        framework: ['net9.0-windows10.0.19041.0']
-        os: [ 'win-x64' ]
-
-    steps:
-
-      - name: ⤵ Checkout the code
-        uses: actions/checkout@v4
-
-      - name: 📢 Publish UI Distribution
-        uses: ./.github/actions/publish-ui-dist
-        id: win-ui-create-artifact
-        with:
-          dotnet-version: ${{ matrix.dotnet }}
-          os: ${{ matrix.os }}
-          framework: ${{ matrix.framework }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   create-gh-release:
-    name: 📢 Publish GH Release
+    name: 📢 Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [publish-ui-dist, publish-docker-images]
+    needs: publish-docker-images
+    permissions:
+      contents: write
     steps:
-
       - name: ⤵ Checkout the code
         uses: actions/checkout@v4
 
-      - name: ⤵ Download the Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.publish-ui-dist.outputs.artifact_name }}
-          path: ${{ github.workspace }}/downloaded
-
-      - name: 📂 Create Zip for Win UI Release Artifact
-        uses: vimtor/action-zip@v1.2
-        with:
-          files: /downloaded # must be relative to gh workspace, does not support absolute paths :(
-          dest: ui_win_${{ github.event.inputs.version }}.zip # this is hardcoded to output to ${{ github.workspace }}/ :(
-
-      - name: ⤴ Create Release and Upload Artifacts
+      - name: ⤴ Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "${{ github.workspace }}/ui_win_${{ github.event.inputs.version }}.zip"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: v${{ github.event.inputs.version }}
+          name: v${{ github.event.inputs.version }}
           allowUpdates: true
-          replacesArtifacts: true
-          bodyFile:  ${{ github.workspace }}/vNextReleaseNotes.md
-
-  publish-gh-pages:
-    name: 📢 Publish GH Pages
-    runs-on: ubuntu-latest
-    needs: [create-gh-release]
-    steps:
-      - name: ⤵ Checkout the code
-        uses: actions/checkout@v4
-
-      - name: ⚙ Configure Git user
-        run: |
-          git config --local user.email "philosowaffle@gmail.com"
-          git config --local user.name "philosowaffle"
-
-      - name: ⤵ Fetch gh-pages
-        run: git fetch origin gh-pages --depth=1
-
-      - name: 💾 Install Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.x
-
-      - name: 💾 Install mkdocs
-        run: pip install mkdocs-material mike
-
-      - name: 📢 Publish Release Docs
-        run: mike deploy --push --update-aliases v${{ github.event.inputs.version }} latest
-        working-directory: ./mkdocs
-
-      - name: 📢 Publish Latest Docs
-        run: mike set-default --push latest
-        working-directory: ./mkdocs
+          bodyFile: ${{ github.workspace }}/vNextReleaseNotes.md
