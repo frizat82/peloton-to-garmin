@@ -191,36 +191,44 @@ public static class GarminFitMergeService
 
 		_logger.Information("Enriched {Enriched}/{Total} RecordMesg entries with Peloton data", enriched, messages.Count);
 
-		// Patch Session and Lap with Peloton's exact distance/avg speed totals
+		// Patch Session with Peloton total distance only when the watch didn't record one
+		// (e.g. indoor cycling/rowing with no GPS). Never patch Laps — multi-sport workouts
+		// (Tread Bootcamp etc.) record per-segment distances that must not be overwritten.
+		// Also skip patching when there are multiple Sessions (multi-sport activity) since
+		// Peloton's total distance only covers the machine portion, not the whole workout.
 		if (pelotonTotalDistanceMeters > 0)
 		{
-			_logger.Information("Patching Session/Lap with Peloton total distance {Distance:F0}m, avg speed {Avg:F2}m/s",
-				pelotonTotalDistanceMeters, pelotonAvgSpeedMps);
+			var sessionMessages = result.Where(m => m.Num == MesgNum.Session).ToList();
+			var isSingleSession = sessionMessages.Count == 1;
 
-			for (int i = 0; i < result.Count; i++)
+			if (isSingleSession)
 			{
-				if (result[i].Num == MesgNum.Session)
+				var session = new SessionMesg(sessionMessages[0]);
+				var existingDistance = session.GetTotalDistance();
+
+				if (existingDistance is null or 0)
 				{
-					var session = new SessionMesg(result[i]);
+					_logger.Information("Patching single Session with Peloton total distance {Distance:F0}m, avg speed {Avg:F2}m/s",
+						pelotonTotalDistanceMeters, pelotonAvgSpeedMps);
+
 					session.SetTotalDistance(pelotonTotalDistanceMeters);
 					if (pelotonAvgSpeedMps > 0)
 					{
 						session.SetAvgSpeed(pelotonAvgSpeedMps);
 						session.SetEnhancedAvgSpeed(pelotonAvgSpeedMps);
 					}
-					result[i] = session;
+
+					var idx = result.IndexOf(sessionMessages[0]);
+					result[idx] = session;
 				}
-				else if (result[i].Num == MesgNum.Lap)
+				else
 				{
-					var lap = new LapMesg(result[i]);
-					lap.SetTotalDistance(pelotonTotalDistanceMeters);
-					if (pelotonAvgSpeedMps > 0)
-					{
-						lap.SetAvgSpeed(pelotonAvgSpeedMps);
-						lap.SetEnhancedAvgSpeed(pelotonAvgSpeedMps);
-					}
-					result[i] = lap;
+					_logger.Information("Session already has distance {Existing:F0}m — skipping Peloton distance patch", existingDistance);
 				}
+			}
+			else
+			{
+				_logger.Information("Multi-sport activity ({Count} sessions) — skipping Peloton distance patch to preserve per-segment distances", sessionMessages.Count);
 			}
 		}
 
