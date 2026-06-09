@@ -41,6 +41,10 @@ public class GarminMergeDb : DbBase<GarminMergeRecord>, IGarminMergeDb
 			var collection = _db.GetCollection<GarminMergeRecord>();
 			ICollection<GarminMergeRecord> result = collection.AsQueryable()
 				.OrderByDescending(r => r.MergedAt)
+				.ToList()
+				.GroupBy(r => r.PelotonWorkoutId)
+				.Select(g => g.First())
+				.OrderByDescending(r => r.MergedAt)
 				.Take(count)
 				.ToList();
 			return Task.FromResult(result);

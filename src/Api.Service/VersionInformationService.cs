@@ -39,7 +39,7 @@ public class VersionInformationService : IVersionInformationService
 				{
 					cacheEntry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
 
-					return _gitHubService.GetLatestReleaseInformationAsync("philosowaffle", "peloton-to-garmin", Constants.AppVersion);
+					return _gitHubService.GetLatestReleaseInformationAsync("frizat82", "peloton-to-garmin", Constants.AppVersion);
 				});
 			}
 		}
