@@ -36,8 +36,12 @@ public static class GarminFitMergeService
 
 		var totalDistanceMeters = GetTotalDistanceMeters(pelotonSamples);
 		var avgSpeedMps = GetAvgSpeedMetersPerSecond(pelotonSamples);
+		var avgCadence = GetAvgCadence(pelotonSamples);
+		var maxCadence = GetMaxCadence(pelotonSamples);
+		var avgPower = GetAvgPower(pelotonSamples);
+		var maxPower = GetMaxPower(pelotonSamples);
 
-		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps);
+		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps, avgCadence, maxCadence, avgPower, maxPower);
 
 		return EncodeMessages(mergedMessages);
 	}
@@ -130,7 +134,11 @@ public static class GarminFitMergeService
 		List<Mesg> messages,
 		Dictionary<uint, PelotonSample> pelotonMap,
 		float pelotonTotalDistanceMeters,
-		float pelotonAvgSpeedMps)
+		float pelotonAvgSpeedMps,
+		byte? pelotonAvgCadence,
+		byte? pelotonMaxCadence,
+		ushort? pelotonAvgPower,
+		ushort? pelotonMaxPower)
 	{
 		int enriched = 0;
 
@@ -232,6 +240,33 @@ public static class GarminFitMergeService
 			}
 		}
 
+		// Patch Session cadence and power summary fields. Watch values always win;
+		// Peloton fills fields the watch left null/zero (e.g. indoor bike has no
+		// cadence sensor on most Garmin watches).
+		for (int i = 0; i < result.Count; i++)
+		{
+			if (result[i].Num != MesgNum.Session) continue;
+
+			var session = new SessionMesg(result[i]);
+			bool modified = false;
+
+			if (session.GetAvgCadence() is null or 0 && pelotonAvgCadence is not null)
+			{ session.SetAvgCadence(pelotonAvgCadence.Value); modified = true; }
+			if (session.GetMaxCadence() is null or 0 && pelotonMaxCadence is not null)
+			{ session.SetMaxCadence(pelotonMaxCadence.Value); modified = true; }
+			if (session.GetAvgPower() is null or 0 && pelotonAvgPower is not null)
+			{ session.SetAvgPower(pelotonAvgPower.Value); modified = true; }
+			if (session.GetMaxPower() is null or 0 && pelotonMaxPower is not null)
+			{ session.SetMaxPower(pelotonMaxPower.Value); modified = true; }
+
+			if (modified)
+			{
+				_logger.Information("Patched Session cadence avg={AvgC} max={MaxC}, power avg={AvgP} max={MaxP}",
+					pelotonAvgCadence, pelotonMaxCadence, pelotonAvgPower, pelotonMaxPower);
+				result[i] = session;
+			}
+		}
+
 		return result;
 	}
 
@@ -268,6 +303,34 @@ public static class GarminFitMergeService
 		var speedSummary = GetSpeedSummary(samples);
 		if (speedSummary is null) return 0f;
 		return ConvertToMetersPerSecond(speedSummary.Average_Value.GetValueOrDefault(), speedSummary.Display_Unit);
+	}
+
+	private static byte? GetAvgCadence(WorkoutSamples samples)
+	{
+		var metric = GetCadenceSummary(samples);
+		if (metric?.Average_Value is null) return null;
+		return (byte)Math.Min(metric.Average_Value.Value, 255);
+	}
+
+	private static byte? GetMaxCadence(WorkoutSamples samples)
+	{
+		var metric = GetCadenceSummary(samples);
+		if (metric?.Max_Value is null) return null;
+		return (byte)Math.Min(metric.Max_Value.Value, 255);
+	}
+
+	private static ushort? GetAvgPower(WorkoutSamples samples)
+	{
+		var metric = samples?.Metrics?.FirstOrDefault(m => m.Slug == "output");
+		if (metric?.Average_Value is null) return null;
+		return (ushort)metric.Average_Value.Value;
+	}
+
+	private static ushort? GetMaxPower(WorkoutSamples samples)
+	{
+		var metric = samples?.Metrics?.FirstOrDefault(m => m.Slug == "output");
+		if (metric?.Max_Value is null) return null;
+		return (ushort)metric.Max_Value.Value;
 	}
 
 	private static Metric GetCadenceSummary(WorkoutSamples samples)
