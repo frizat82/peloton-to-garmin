@@ -62,6 +62,12 @@ services:
       - ./config/api/:/app/config
       - ./data:/app/data          # persists settings across restarts
       - ./output:/app/output      # generated workout files and logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
 
   p2g-webui:
     container_name: p2g-webui
@@ -76,20 +82,18 @@ services:
     volumes:
       - ./config/webui:/app/config
     depends_on:
-      - p2g-api
+      p2g-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
 
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=3600   # check for updates every hour
-    restart: unless-stopped
 ```
 
-> **Image tags:** `*-stable` only updates when a release is cut (recommended for production). `*-latest` tracks every merge to master. Watchtower auto-pulls and restarts containers when a new image is published.
+> **Image tags:** `*-stable` only updates when a release is cut (recommended for production). `*-latest` tracks every merge to master.
 
 **4. Start P2G:**
 

@@ -79,6 +79,7 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
+app.MapGet("/health", () => Results.Ok());
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");
 
