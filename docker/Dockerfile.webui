@@ -4,7 +4,7 @@
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 
 RUN apt-get update \
-	&& apt-get -y install bash tzdata \
+	&& apt-get -y install bash tzdata curl \
 	&& apt-get purge -y -f --force-yes $EXT_BUILD_DEPS \
 	&& apt-get autoremove -y \
 	&& apt-get clean \
@@ -57,5 +57,7 @@ COPY --chown=p2g:p2g --chmod=770 --from=build /build/published .
 COPY --chown=p2g:p2g --chmod=770 --from=build /build/LICENSE ./LICENSE
 COPY --chown=p2g:p2g --chmod=770 --from=build /build/configuration.example.json ./configuration.local.json
 
-EXPOSE 80 443
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 ENTRYPOINT ["/app/WebUI"]

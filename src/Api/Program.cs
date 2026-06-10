@@ -92,6 +92,7 @@ app.Use((context, next) =>
 
 //app.UseHttpsRedirection();
 app.UseAuthorization();
+app.MapGet("/health", () => Results.Ok());
 app.MapControllers();
 
 ///////////////////////////////////////////////////////////
