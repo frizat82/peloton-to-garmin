@@ -91,18 +91,9 @@ services:
       start_period: 40s
       retries: 3
 
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=3600   # check for updates every hour
-    restart: unless-stopped
 ```
 
-> **Image tags:** `*-stable` only updates when a release is cut (recommended for production). `*-latest` tracks every merge to master. Watchtower auto-pulls and restarts containers when a new image is published.
+> **Image tags:** `*-stable` only updates when a release is cut (recommended for production). `*-latest` tracks every merge to master.
 
 **4. Start P2G:**
 
