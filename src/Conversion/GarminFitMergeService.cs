@@ -34,6 +34,10 @@ public static class GarminFitMergeService
 
 		var pelotonSampleMap = BuildPelotonSampleMap(pelotonSamples, workoutStartUnix);
 
+		// Log timing alignment so mismatches are visible in the app log.
+		// Per-second injection fails silently when timestamps don't overlap.
+		LogTimingDiagnostics(allMessages, pelotonSampleMap, workoutStartUnix);
+
 		var totalDistanceMeters = GetTotalDistanceMeters(pelotonSamples);
 		var avgSpeedMps = GetAvgSpeedMetersPerSecond(pelotonSamples);
 		var avgCadence = GetAvgCadence(pelotonSamples);
@@ -44,6 +48,44 @@ public static class GarminFitMergeService
 		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps, avgCadence, maxCadence, avgPower, maxPower);
 
 		return EncodeMessages(mergedMessages);
+	}
+
+	private static void LogTimingDiagnostics(List<Mesg> messages, Dictionary<uint, PelotonSample> pelotonMap, long workoutStartUnix)
+	{
+		if (pelotonMap.Count == 0) return;
+
+		var pelotonMinKey = pelotonMap.Keys.Min();
+		var pelotonMaxKey = pelotonMap.Keys.Max();
+		var pelotonStart = DateTimeOffset.FromUnixTimeSeconds(pelotonMinKey).UtcDateTime;
+		var pelotonEnd = DateTimeOffset.FromUnixTimeSeconds(pelotonMaxKey).UtcDateTime;
+
+		uint garminFirstUnix = 0;
+		foreach (var mesg in messages)
+		{
+			if (mesg.Num != MesgNum.Record) continue;
+			var r = new RecordMesg(mesg);
+			var ts = r.GetTimestamp();
+			if (ts is null) continue;
+			garminFirstUnix = ts.GetTimeStamp() + 631065600u;
+			break;
+		}
+
+		if (garminFirstUnix == 0)
+		{
+			_logger.Warning("FIT merge timing: could not find any timestamped RecordMesg in watch FIT — per-second injection will be skipped");
+			return;
+		}
+
+		var garminStart = DateTimeOffset.FromUnixTimeSeconds(garminFirstUnix).UtcDateTime;
+		var offsetSec = (long)garminFirstUnix - workoutStartUnix;
+		var overlaps = garminFirstUnix <= pelotonMaxKey && pelotonMinKey <= garminFirstUnix + 7200;
+
+		_logger.Information(
+			"FIT merge timing: Garmin first record {GarminStart:HH:mm:ss} UTC, Peloton samples {PelotonStart:HH:mm:ss}–{PelotonEnd:HH:mm:ss} UTC, offset={Offset:+0;-0;0}s, overlap={Overlap}",
+			garminStart, pelotonStart, pelotonEnd, offsetSec, overlaps);
+
+		if (!overlaps)
+			_logger.Warning("FIT merge timing: Garmin recording and Peloton samples do NOT overlap — per-second injection will produce 0 enriched records. Check that FIT merge is matching the correct Garmin activity.");
 	}
 
 	// ─── Decode ──────────────────────────────────────────────────────────────
@@ -175,9 +217,14 @@ public static class GarminFitMergeService
 
 			if (sample is not null)
 			{
-				// Speed: watch value wins; Peloton fills if null/zero
-				if (record.GetSpeed() is null or 0 && sample.SpeedMps is not null)
+				// Speed: watch value wins; Peloton fills if null/zero.
+				// Set both Speed (field 6) and EnhancedSpeed (field 136) — modern Garmin
+				// devices and Garmin Connect use EnhancedSpeed for the per-second chart.
+				if ((record.GetSpeed() is null or 0) && (record.GetEnhancedSpeed() is null or 0) && sample.SpeedMps is not null)
+				{
 					record.SetSpeed(sample.SpeedMps.Value);
+					record.SetEnhancedSpeed(sample.SpeedMps.Value);
+				}
 
 				// Power: watch value wins
 				if (record.GetPower() is null or 0 && sample.Power is not null)
