@@ -34,12 +34,59 @@ public static class GarminFitMergeService
 
 		var pelotonSampleMap = BuildPelotonSampleMap(pelotonSamples, workoutStartUnix);
 
+		// Log timing alignment so mismatches are visible in the app log.
+		// Per-second injection fails silently when timestamps don't overlap.
+		LogTimingDiagnostics(allMessages, pelotonSampleMap, workoutStartUnix);
+
 		var totalDistanceMeters = GetTotalDistanceMeters(pelotonSamples);
 		var avgSpeedMps = GetAvgSpeedMetersPerSecond(pelotonSamples);
+		var maxSpeedMps = GetMaxSpeedMetersPerSecond(pelotonSamples);
+		var avgCadence = GetAvgCadence(pelotonSamples);
+		var maxCadence = GetMaxCadence(pelotonSamples);
+		var avgPower = GetAvgPower(pelotonSamples);
+		var maxPower = GetMaxPower(pelotonSamples);
 
-		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps);
+		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps, maxSpeedMps, avgCadence, maxCadence, avgPower, maxPower);
 
 		return EncodeMessages(mergedMessages);
+	}
+
+	private static void LogTimingDiagnostics(List<Mesg> messages, Dictionary<uint, PelotonSample> pelotonMap, long workoutStartUnix)
+	{
+		if (pelotonMap.Count == 0) return;
+
+		var pelotonMinKey = pelotonMap.Keys.Min();
+		var pelotonMaxKey = pelotonMap.Keys.Max();
+		var pelotonStart = DateTimeOffset.FromUnixTimeSeconds(pelotonMinKey).UtcDateTime;
+		var pelotonEnd = DateTimeOffset.FromUnixTimeSeconds(pelotonMaxKey).UtcDateTime;
+
+		uint garminFirstUnix = 0;
+		foreach (var mesg in messages)
+		{
+			if (mesg.Num != MesgNum.Record) continue;
+			var r = new RecordMesg(mesg);
+			var ts = r.GetTimestamp();
+			if (ts is null) continue;
+			garminFirstUnix = ts.GetTimeStamp() + 631065600u;
+			break;
+		}
+
+		if (garminFirstUnix == 0)
+		{
+			_logger.Warning("FIT merge timing: could not find any timestamped RecordMesg in watch FIT — per-second injection will be skipped");
+			return;
+		}
+
+		var garminStart = DateTimeOffset.FromUnixTimeSeconds(garminFirstUnix).UtcDateTime;
+		var offsetSec = (long)garminFirstUnix - workoutStartUnix;
+		var overlaps = garminFirstUnix <= pelotonMaxKey && pelotonMinKey <= garminFirstUnix + 7200;
+
+		_logger.Information(
+			"FIT merge timing: Garmin first record {GarminStart:HH:mm:ss} UTC, Peloton samples {PelotonStart:HH:mm:ss}–{PelotonEnd:HH:mm:ss} UTC, offset={Offset:+0;-0;0}s, overlap={Overlap}",
+			garminStart, pelotonStart, pelotonEnd, offsetSec, overlaps);
+
+		if (!overlaps)
+			_logger.Warning("FIT merge timing: Garmin recording and Peloton samples do NOT overlap — per-second injection will produce 0 enriched records. Check that FIT merge is matching the correct Garmin activity.");
 	}
 
 	// ─── Decode ──────────────────────────────────────────────────────────────
@@ -130,9 +177,15 @@ public static class GarminFitMergeService
 		List<Mesg> messages,
 		Dictionary<uint, PelotonSample> pelotonMap,
 		float pelotonTotalDistanceMeters,
-		float pelotonAvgSpeedMps)
+		float pelotonAvgSpeedMps,
+		float pelotonMaxSpeedMps,
+		byte? pelotonAvgCadence,
+		byte? pelotonMaxCadence,
+		ushort? pelotonAvgPower,
+		ushort? pelotonMaxPower)
 	{
 		int enriched = 0;
+		int speedInjected = 0;
 
 		var result = new List<Mesg>(messages.Count);
 		foreach (var mesg in messages)
@@ -165,11 +218,29 @@ public static class GarminFitMergeService
 			else if (pelotonMap.TryGetValue(unixTs + 1, out var next))
 				sample = next;
 
+			// Speed plausibility bounds used for both matched and unmatched records.
+			// The FIT SDK promotes Speed's 0xFFFF sentinel (65535/1000 = 65.535 m/s = 235.9 km/h)
+			// into GetEnhancedSpeed() without treating it as invalid (65535 ≠ uint32 0xFFFFFFFF).
+			// Some watches also write EnhancedSpeed as a 1-byte field, giving ~0.09 m/s garbage.
+			// Anything outside 0.5–30 m/s is treated as "no real data".
+			const float minPlausibleSpeedMps = 0.5f;
+			const float maxPlausibleSpeedMps = 30f;
+
 			if (sample is not null)
 			{
-				// Speed: watch value wins; Peloton fills if null/zero
-				if (record.GetSpeed() is null or 0 && sample.SpeedMps is not null)
+				// Speed: watch value wins if plausible; Peloton fills otherwise.
+				// Set both Speed (field 6) and EnhancedSpeed (field 136) — Garmin Connect
+				// uses EnhancedSpeed for the per-second chart.
+				var watchSpeed = record.GetSpeed();
+				var watchESpeed = record.GetEnhancedSpeed();
+				bool watchHasRealSpeed = (watchSpeed >= minPlausibleSpeedMps && watchSpeed <= maxPlausibleSpeedMps)
+					|| (watchESpeed >= minPlausibleSpeedMps && watchESpeed <= maxPlausibleSpeedMps);
+				if (!watchHasRealSpeed && sample.SpeedMps is not null)
+				{
 					record.SetSpeed(sample.SpeedMps.Value);
+					record.SetEnhancedSpeed(sample.SpeedMps.Value);
+					speedInjected++;
+				}
 
 				// Power: watch value wins
 				if (record.GetPower() is null or 0 && sample.Power is not null)
@@ -185,11 +256,24 @@ public static class GarminFitMergeService
 
 				enriched++;
 			}
+			else
+			{
+				// No matching Peloton sample (pre/post-workout records). Clear any implausible
+				// speed so the 0xFFFF sentinel doesn't spike the chart or inflate max speed.
+				var watchSpeed = record.GetSpeed();
+				var watchESpeed = record.GetEnhancedSpeed();
+				bool hasGarbageSpeed = (watchSpeed > maxPlausibleSpeedMps) || (watchESpeed > maxPlausibleSpeedMps);
+				if (hasGarbageSpeed)
+				{
+					record.SetSpeed(0f);
+					record.SetEnhancedSpeed(0f);
+				}
+			}
 
 			result.Add(record);
 		}
 
-		_logger.Information("Enriched {Enriched}/{Total} RecordMesg entries with Peloton data", enriched, messages.Count);
+		_logger.Information("Enriched {Enriched}/{Total} RecordMesg entries with Peloton data ({Speed} speed, cadence, power)", enriched, messages.Count, speedInjected);
 
 		// Patch Session with Peloton total distance only when the watch didn't record one
 		// (e.g. indoor cycling/rowing with no GPS). Never patch Laps — multi-sport workouts
@@ -217,6 +301,11 @@ public static class GarminFitMergeService
 						session.SetAvgSpeed(pelotonAvgSpeedMps);
 						session.SetEnhancedAvgSpeed(pelotonAvgSpeedMps);
 					}
+					if (pelotonMaxSpeedMps > 0)
+					{
+						session.SetMaxSpeed(pelotonMaxSpeedMps);
+						session.SetEnhancedMaxSpeed(pelotonMaxSpeedMps);
+					}
 
 					var idx = result.IndexOf(sessionMessages[0]);
 					result[idx] = session;
@@ -229,6 +318,33 @@ public static class GarminFitMergeService
 			else
 			{
 				_logger.Information("Multi-sport activity ({Count} sessions) — skipping Peloton distance patch to preserve per-segment distances", sessionMessages.Count);
+			}
+		}
+
+		// Patch Session cadence and power summary fields. Watch values always win;
+		// Peloton fills fields the watch left null/zero (e.g. indoor bike has no
+		// cadence sensor on most Garmin watches).
+		for (int i = 0; i < result.Count; i++)
+		{
+			if (result[i].Num != MesgNum.Session) continue;
+
+			var session = new SessionMesg(result[i]);
+			bool modified = false;
+
+			if (session.GetAvgCadence() is null or 0 && pelotonAvgCadence is not null)
+			{ session.SetAvgCadence(pelotonAvgCadence.Value); modified = true; }
+			if (session.GetMaxCadence() is null or 0 && pelotonMaxCadence is not null)
+			{ session.SetMaxCadence(pelotonMaxCadence.Value); modified = true; }
+			if (session.GetAvgPower() is null or 0 && pelotonAvgPower is not null)
+			{ session.SetAvgPower(pelotonAvgPower.Value); modified = true; }
+			if (session.GetMaxPower() is null or 0 && pelotonMaxPower is not null)
+			{ session.SetMaxPower(pelotonMaxPower.Value); modified = true; }
+
+			if (modified)
+			{
+				_logger.Information("Patched Session cadence avg={AvgC} max={MaxC}, power avg={AvgP} max={MaxP}",
+					pelotonAvgCadence, pelotonMaxCadence, pelotonAvgPower, pelotonMaxPower);
+				result[i] = session;
 			}
 		}
 
@@ -263,11 +379,46 @@ public static class GarminFitMergeService
 		return ConvertDistanceToMeters((float)summary.Value.GetValueOrDefault(), summary.Display_Unit);
 	}
 
+	private static float GetMaxSpeedMetersPerSecond(WorkoutSamples samples)
+	{
+		var speedSummary = GetSpeedSummary(samples);
+		if (speedSummary is null) return 0f;
+		return ConvertToMetersPerSecond(speedSummary.Max_Value.GetValueOrDefault(), speedSummary.Display_Unit);
+	}
+
 	private static float GetAvgSpeedMetersPerSecond(WorkoutSamples samples)
 	{
 		var speedSummary = GetSpeedSummary(samples);
 		if (speedSummary is null) return 0f;
 		return ConvertToMetersPerSecond(speedSummary.Average_Value.GetValueOrDefault(), speedSummary.Display_Unit);
+	}
+
+	private static byte? GetAvgCadence(WorkoutSamples samples)
+	{
+		var metric = GetCadenceSummary(samples);
+		if (metric?.Average_Value is null) return null;
+		return (byte)Math.Min(metric.Average_Value.Value, 255);
+	}
+
+	private static byte? GetMaxCadence(WorkoutSamples samples)
+	{
+		var metric = GetCadenceSummary(samples);
+		if (metric?.Max_Value is null) return null;
+		return (byte)Math.Min(metric.Max_Value.Value, 255);
+	}
+
+	private static ushort? GetAvgPower(WorkoutSamples samples)
+	{
+		var metric = samples?.Metrics?.FirstOrDefault(m => m.Slug == "output");
+		if (metric?.Average_Value is null) return null;
+		return (ushort)metric.Average_Value.Value;
+	}
+
+	private static ushort? GetMaxPower(WorkoutSamples samples)
+	{
+		var metric = samples?.Metrics?.FirstOrDefault(m => m.Slug == "output");
+		if (metric?.Max_Value is null) return null;
+		return (ushort)metric.Max_Value.Value;
 	}
 
 	private static Metric GetCadenceSummary(WorkoutSamples samples)
