@@ -1,5 +1,6 @@
 using Common.Dto;
 using Common.Dto.Peloton;
+using Common.Helpers;
 using Common.Observe;
 using Common.Service;
 using Conversion;
@@ -29,6 +30,12 @@ public interface IGarminActivityEnrichmentService
 	/// Returns a result for every workout (matched and unmatched).
 	/// </summary>
 	Task<ICollection<GarminEnrichmentResult>> PreviewAsync(IEnumerable<P2GWorkout> workouts);
+
+	/// <summary>
+	/// Uploads a previously backed-up watch FIT file to Garmin Connect.
+	/// Used to manually restore an activity that was deleted during a failed merge.
+	/// </summary>
+	Task<bool> UploadFitBackupToGarminAsync(string fileName);
 }
 
 public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
@@ -237,9 +244,10 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		_logger.Information("Enriching Garmin activity {GarminActivityId} with {Count} Peloton workout(s): {WorkoutIds}.",
 			garminActivityId, group.Count, workoutIds);
 
+		var mergeStatus = MergeStatus.Success;
 		if (settings.Garmin.MergeFitWithWatch)
 		{
-			await ApplyFitMergeAsync(garminActivityId, primary, group, auth);
+			mergeStatus = await ApplyFitMergeAsync(garminActivityId, primary, group, auth);
 		}
 		else
 		{
@@ -268,11 +276,12 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				GarminActivityId = garminActivityId,
 				MergedAt = DateTime.UtcNow,
 				Source = MergeSource.Auto,
+				Status = mergeStatus,
 			});
 		}
 	}
 
-	private async Task ApplyFitMergeAsync(
+	private async Task<MergeStatus> ApplyFitMergeAsync(
 		long garminActivityId,
 		(P2GWorkout P2GWorkout, GarminEnrichmentResult Result) primary,
 		List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group,
@@ -305,7 +314,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		{
 			_logger.Warning(e, "FIT merge: failed to download watch FIT for activity {GarminActivityId} — skipping, no changes made. {Message}",
 				garminActivityId, e.Message);
-			return;
+			return MergeStatus.Success;
 		}
 
 		// Back up the original watch FIT before we delete anything — this is the
@@ -320,12 +329,16 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		_logger.Information("FIT merge: deleting original Garmin activity {GarminActivityId} before uploading merged FIT", garminActivityId);
 		await _apiClient.DeleteActivityAsync(garminActivityId, auth);
 
-		// Write merged FIT to a temp file for upload
 		var tempPath = Path.Combine(Path.GetTempPath(), $"p2g_merge_{garminActivityId}.fit");
 		try
 		{
 			await File.WriteAllBytesAsync(tempPath, mergedFitBytes);
-			var uploadResponse = await _apiClient.UploadActivity(tempPath, ".fit", auth);
+			await RetryHelper.RetryWithBackoffAsync(
+				() => _apiClient.UploadActivity(tempPath, ".fit", auth),
+				maxAttempts: 3,
+				baseDelaySeconds: 2.0,
+				logger: _logger,
+				operationName: $"FIT merge upload {garminActivityId}");
 			_logger.Information("FIT merge: uploaded merged FIT for original activity {GarminActivityId}", garminActivityId);
 
 			long? newActivityId = null;
@@ -357,12 +370,60 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				await _apiClient.UpdateActivityAsync(newActivityId.Value, nameUpdate, auth);
 				_logger.Information("FIT merge: updated activity name to '{Name}' for new activity {NewId}", nameUpdate.ActivityName, newActivityId.Value);
 			}
+
+			return MergeStatus.Success;
+		}
+		catch (Exception uploadEx)
+		{
+			// All upload retries exhausted. Attempt to restore the original watch FIT.
+			_logger.Error(uploadEx, "FIT merge: all upload attempts failed for {GarminActivityId} — restoring original watch FIT", garminActivityId);
+
+			var restorePath = Path.Combine(Path.GetTempPath(), $"p2g_restore_{garminActivityId}.fit");
+			try
+			{
+				await File.WriteAllBytesAsync(restorePath, watchFitBytes);
+				await _apiClient.UploadActivity(restorePath, ".fit", auth);
+				_logger.Warning("FIT merge: original watch FIT restored to Garmin for activity {GarminActivityId}", garminActivityId);
+				return MergeStatus.OriginalRestored;
+			}
+			catch (Exception restoreEx)
+			{
+				_logger.Error(restoreEx, "FIT merge: CRITICAL — restore also failed for {GarminActivityId}. Download the backup from the Activity Merge page to recover manually.", garminActivityId);
+				return MergeStatus.RestoreFailed;
+			}
+			finally
+			{
+				if (File.Exists(restorePath)) File.Delete(restorePath);
+			}
 		}
 		finally
 		{
 			if (File.Exists(tempPath))
 				File.Delete(tempPath);
 		}
+	}
+
+	public async Task<bool> UploadFitBackupToGarminAsync(string fileName)
+	{
+		if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(".."))
+			throw new ArgumentException("Invalid file name.", nameof(fileName));
+
+		var auth = await _authService.GetGarminAuthenticationAsync();
+		if (auth.AuthStage == AuthStage.NeedMfaToken || auth.AuthStage == AuthStage.None)
+		{
+			_logger.Warning("UploadFitBackup: not authenticated with Garmin.");
+			return false;
+		}
+
+		var dir = GetFitBackupDirectory();
+		var fullPath = Path.Join(dir, fileName);
+		if (!File.Exists(fullPath))
+			throw new FileNotFoundException("Backup file not found.", fullPath);
+
+		_logger.Information("UploadFitBackup: uploading {FileName} to Garmin", fileName);
+		await _apiClient.UploadActivity(fullPath, ".fit", auth);
+		_logger.Information("UploadFitBackup: upload complete for {FileName}", fileName);
+		return true;
 	}
 
 

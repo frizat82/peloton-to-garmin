@@ -5,6 +5,8 @@ namespace Api.Contract;
 
 public enum MergeSourceDto { Auto, Manual }
 
+public enum MergeStatusDto { Success, OriginalRestored, RestoreFailed }
+
 public record GarminMergeGetResponse
 {
 	public GarminMergeGetResponse()
@@ -22,6 +24,7 @@ public record GarminMergeRecordDto
 	public long GarminActivityId { get; init; }
 	public DateTime MergedAt { get; init; }
 	public MergeSourceDto Source { get; init; }
+	public MergeStatusDto Status { get; init; }
 }
 
 public record GarminMergePostRequest
@@ -67,4 +70,10 @@ public record FitBackupItem
 	public string FileName { get; init; } = string.Empty;
 	public long SizeBytes { get; init; }
 	public DateTime CreatedUtc { get; init; }
+}
+
+public record FitBackupUploadResponse
+{
+	public bool Success { get; init; }
+	public string? Message { get; init; }
 }
