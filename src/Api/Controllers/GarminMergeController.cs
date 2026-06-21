@@ -3,6 +3,7 @@ using Garmin;
 using Garmin.Database;
 using Garmin.Dto;
 using Microsoft.AspNetCore.Mvc;
+using Serilog;
 using Sync;
 using System;
 using System.IO;
@@ -19,11 +20,13 @@ public class GarminMergeController : Controller
 {
 	private readonly IGarminMergeDb _mergeDb;
 	private readonly ISyncService _syncService;
+	private readonly IGarminActivityEnrichmentService _enrichmentService;
 
-	public GarminMergeController(IGarminMergeDb mergeDb, ISyncService syncService)
+	public GarminMergeController(IGarminMergeDb mergeDb, ISyncService syncService, IGarminActivityEnrichmentService enrichmentService)
 	{
 		_mergeDb = mergeDb;
 		_syncService = syncService;
+		_enrichmentService = enrichmentService;
 	}
 
 	/// <summary>
@@ -126,6 +129,38 @@ public class GarminMergeController : Controller
 
 		var bytes = System.IO.File.ReadAllBytes(fullPath);
 		return File(bytes, "application/octet-stream", fileName);
+	}
+
+	/// <summary>
+	/// Uploads a backed-up watch FIT file directly to Garmin Connect.
+	/// Used to restore an activity that was deleted during a failed merge.
+	/// </summary>
+	[HttpPost("fit-backups/{fileName}/upload-to-garmin")]
+	[ProducesResponseType(typeof(FitBackupUploadResponse), StatusCodes.Status200OK)]
+	[ProducesResponseType(typeof(Contract.ErrorResponse), StatusCodes.Status404NotFound)]
+	[ProducesResponseType(typeof(Contract.ErrorResponse), StatusCodes.Status500InternalServerError)]
+	public async Task<ActionResult<FitBackupUploadResponse>> UploadFitBackupToGarminAsync(string fileName)
+	{
+		if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(".."))
+			return BadRequest(new Contract.ErrorResponse("Invalid file name."));
+
+		try
+		{
+			var success = await _enrichmentService.UploadFitBackupToGarminAsync(fileName);
+			if (!success)
+				return Ok(new FitBackupUploadResponse { Success = false, Message = "Not authenticated with Garmin. Check your credentials." });
+
+			return Ok(new FitBackupUploadResponse { Success = true, Message = "Activity uploaded to Garmin successfully." });
+		}
+		catch (FileNotFoundException)
+		{
+			return NotFound(new Contract.ErrorResponse($"Backup file '{fileName}' not found."));
+		}
+		catch (Exception e)
+		{
+			Log.Error(e, "Failed to upload FIT backup {FileName} to Garmin", fileName);
+			return StatusCode(StatusCodes.Status500InternalServerError, new Contract.ErrorResponse($"Upload failed: {e.Message}"));
+		}
 	}
 
 	[HttpPost]

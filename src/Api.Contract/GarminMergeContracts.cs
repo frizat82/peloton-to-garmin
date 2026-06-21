@@ -68,3 +68,9 @@ public record FitBackupItem
 	public long SizeBytes { get; init; }
 	public DateTime CreatedUtc { get; init; }
 }
+
+public record FitBackupUploadResponse
+{
+	public bool Success { get; init; }
+	public string? Message { get; init; }
+}

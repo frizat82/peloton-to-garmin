@@ -337,4 +337,33 @@ public class ApiClient : IApiClient
 			throw new ApiClientException(error?.Message, e);
 		}
 	}
+
+	public async Task<byte[]> DownloadFitBackupAsync(string fileName)
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/garminmerge/fit-backups/{Uri.EscapeDataString(fileName)}"
+				.GetBytesAsync();
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
+
+	public async Task<FitBackupUploadResponse> UploadFitBackupToGarminAsync(string fileName)
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/garminmerge/fit-backups/{Uri.EscapeDataString(fileName)}/upload-to-garmin"
+				.PostJsonAsync(new { })
+				.ReceiveJson<FitBackupUploadResponse>();
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
 }

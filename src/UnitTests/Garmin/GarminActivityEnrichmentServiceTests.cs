@@ -11,6 +11,7 @@ using Moq.AutoMock;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace UnitTests.Garmin
@@ -197,6 +198,59 @@ namespace UnitTests.Garmin
 
 			result.Should().BeEmpty();
 			mocker.GetMock<IGarminMergeDb>().Verify(db => db.SaveAsync(It.IsAny<GarminMergeRecord>()), Times.Never);
+		}
+
+		/// <summary>
+		/// Regression test: when the merged FIT upload fails after the original activity was already
+		/// deleted, the service must attempt to re-upload the original watch FIT so the activity is
+		/// not permanently lost from Garmin.
+		/// </summary>
+		[Test]
+		public async Task FitMerge_When_MergedUploadFails_AttemptRestoreOfOriginal()
+		{
+			var mocker = new AutoMocker();
+			var service = mocker.CreateInstance<GarminActivityEnrichmentService>();
+
+			var settings = BuildSettings();
+			settings.Garmin.MergeFitWithWatch = true;
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(settings);
+			mocker.GetMock<IGarminAuthenticationService>()
+				.Setup(a => a.GetGarminAuthenticationAsync())
+				.ReturnsAsync(new GarminApiAuthentication { AuthStage = AuthStage.Completed });
+
+			var activity = BuildActivity(activityId: 42);
+			// First call: initial activity search. Second+ calls: post-upload polling (won't be reached).
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { activity });
+
+			// Use a real FIT file so MergeWatchFitWithPeloton doesn't throw before reaching delete
+			var fitDataDir = Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "Data");
+			var fakeFitBytes = File.ReadAllBytes(Path.Join(fitDataDir, "Fenix_Incline.fit"));
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.DownloadActivityFitAsync(42, It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(fakeFitBytes);
+
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.DeleteActivityAsync(42, It.IsAny<GarminApiAuthentication>()))
+				.Returns(Task.CompletedTask);
+
+			// Merged FIT upload fails
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()))
+				.ThrowsAsync(new Exception("Garmin upload service unavailable"));
+
+			// Should not throw; restore attempt is best-effort
+			Func<Task> act = () => service.EnrichAsync(new[] { BuildWorkout("w1") });
+			await act.Should().NotThrowAsync();
+
+			// Delete was called once (activity was deleted before upload attempt)
+			mocker.GetMock<IGarminApiClient>()
+				.Verify(c => c.DeleteActivityAsync(42, It.IsAny<GarminApiAuthentication>()), Times.Once);
+
+			// UploadActivity called twice: once for merged FIT (fails), once for restore
+			mocker.GetMock<IGarminApiClient>()
+				.Verify(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()), Times.Exactly(2));
 		}
 
 		[Test]

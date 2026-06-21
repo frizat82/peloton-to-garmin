@@ -29,6 +29,12 @@ public interface IGarminActivityEnrichmentService
 	/// Returns a result for every workout (matched and unmatched).
 	/// </summary>
 	Task<ICollection<GarminEnrichmentResult>> PreviewAsync(IEnumerable<P2GWorkout> workouts);
+
+	/// <summary>
+	/// Uploads a previously backed-up watch FIT file to Garmin Connect.
+	/// Used to manually restore an activity that was deleted during a failed merge.
+	/// </summary>
+	Task<bool> UploadFitBackupToGarminAsync(string fileName);
 }
 
 public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
@@ -358,11 +364,56 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				_logger.Information("FIT merge: updated activity name to '{Name}' for new activity {NewId}", nameUpdate.ActivityName, newActivityId.Value);
 			}
 		}
+		catch (Exception uploadEx)
+		{
+			// Upload of the merged FIT failed after the original was already deleted.
+			// Attempt to restore the original watch FIT so the activity isn't permanently lost.
+			_logger.Error(uploadEx, "FIT merge: merged FIT upload FAILED for activity {GarminActivityId} — attempting to restore original watch FIT", garminActivityId);
+
+			var restorePath = Path.Combine(Path.GetTempPath(), $"p2g_restore_{garminActivityId}.fit");
+			try
+			{
+				await File.WriteAllBytesAsync(restorePath, watchFitBytes);
+				await _apiClient.UploadActivity(restorePath, ".fit", auth);
+				_logger.Warning("FIT merge: original watch FIT restored to Garmin for activity {GarminActivityId}", garminActivityId);
+			}
+			catch (Exception restoreEx)
+			{
+				_logger.Error(restoreEx, "FIT merge: CRITICAL — restore also failed for {GarminActivityId}. Download the backup from the Activity Merge page to recover manually.", garminActivityId);
+			}
+			finally
+			{
+				if (File.Exists(restorePath)) File.Delete(restorePath);
+			}
+		}
 		finally
 		{
 			if (File.Exists(tempPath))
 				File.Delete(tempPath);
 		}
+	}
+
+	public async Task<bool> UploadFitBackupToGarminAsync(string fileName)
+	{
+		if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(".."))
+			throw new ArgumentException("Invalid file name.", nameof(fileName));
+
+		var auth = await _authService.GetGarminAuthenticationAsync();
+		if (auth.AuthStage == AuthStage.NeedMfaToken || auth.AuthStage == AuthStage.None)
+		{
+			_logger.Warning("UploadFitBackup: not authenticated with Garmin.");
+			return false;
+		}
+
+		var dir = GetFitBackupDirectory();
+		var fullPath = Path.Join(dir, fileName);
+		if (!File.Exists(fullPath))
+			throw new FileNotFoundException("Backup file not found.", fullPath);
+
+		_logger.Information("UploadFitBackup: uploading {FileName} to Garmin", fileName);
+		await _apiClient.UploadActivity(fullPath, ".fit", auth);
+		_logger.Information("UploadFitBackup: upload complete for {FileName}", fileName);
+		return true;
 	}
 
 
