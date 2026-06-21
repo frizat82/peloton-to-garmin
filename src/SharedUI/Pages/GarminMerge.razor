@@ -72,6 +72,22 @@
                             }
                         </ItemTemplate>
                     </HxGridColumn>
+                    <HxGridColumn TItem="GarminMergeRecordDto" HeaderText="Status">
+                        <ItemTemplate>
+                            @if (context.Status == MergeStatusDto.OriginalRestored)
+                            {
+                                <HxBadge Color="ThemeColor.Warning" title="Merged FIT upload failed after retries — original watch activity was restored. No Peloton data.">Restored</HxBadge>
+                            }
+                            else if (context.Status == MergeStatusDto.RestoreFailed)
+                            {
+                                <HxBadge Color="ThemeColor.Danger" title="Merged FIT upload failed and restore also failed. Download backup from the table below.">Failed</HxBadge>
+                            }
+                            else
+                            {
+                                <HxBadge Color="ThemeColor.Success">OK</HxBadge>
+                            }
+                        </ItemTemplate>
+                    </HxGridColumn>
                 </Columns>
                 <EmptyDataTemplate>
                     <p class="text-muted">No merge records yet. Enable <b>Merge with Garmin device activities</b> in Settings and run a sync.</p>

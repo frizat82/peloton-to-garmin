@@ -47,6 +47,12 @@ public class GarminMergeController : Controller
 				GarminActivityId = r.GarminActivityId,
 				MergedAt = r.MergedAt,
 				Source = r.Source == MergeSource.Manual ? MergeSourceDto.Manual : MergeSourceDto.Auto,
+				Status = r.Status switch
+				{
+					MergeStatus.OriginalRestored => MergeStatusDto.OriginalRestored,
+					MergeStatus.RestoreFailed => MergeStatusDto.RestoreFailed,
+					_ => MergeStatusDto.Success,
+				},
 			}).ToList()
 		};
 		return Ok(response);

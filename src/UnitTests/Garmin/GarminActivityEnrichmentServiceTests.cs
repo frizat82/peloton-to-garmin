@@ -248,9 +248,9 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>()
 				.Verify(c => c.DeleteActivityAsync(42, It.IsAny<GarminApiAuthentication>()), Times.Once);
 
-			// UploadActivity called twice: once for merged FIT (fails), once for restore
+			// UploadActivity called 4 times: 3 retries for merged FIT (all fail), then 1 restore attempt
 			mocker.GetMock<IGarminApiClient>()
-				.Verify(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()), Times.Exactly(2));
+				.Verify(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()), Times.Exactly(4));
 		}
 
 		[Test]

@@ -100,9 +100,17 @@ public class GarminMergeRecord
 	public long GarminActivityId { get; set; }
 	public DateTime MergedAt { get; set; }
 	public MergeSource Source { get; set; }
+	public MergeStatus Status { get; set; } = MergeStatus.Success;
 }
 
 public enum MergeSource { Auto, Manual }
+
+public enum MergeStatus
+{
+	Success,
+	OriginalRestored,
+	RestoreFailed,
+}
 
 public class GarminEnrichmentResult
 {

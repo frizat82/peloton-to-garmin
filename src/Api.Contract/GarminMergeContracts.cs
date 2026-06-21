@@ -5,6 +5,8 @@ namespace Api.Contract;
 
 public enum MergeSourceDto { Auto, Manual }
 
+public enum MergeStatusDto { Success, OriginalRestored, RestoreFailed }
+
 public record GarminMergeGetResponse
 {
 	public GarminMergeGetResponse()
@@ -22,6 +24,7 @@ public record GarminMergeRecordDto
 	public long GarminActivityId { get; init; }
 	public DateTime MergedAt { get; init; }
 	public MergeSourceDto Source { get; init; }
+	public MergeStatusDto Status { get; init; }
 }
 
 public record GarminMergePostRequest
