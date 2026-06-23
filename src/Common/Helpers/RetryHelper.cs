@@ -13,12 +13,18 @@ public static class RetryHelper
 	/// exponential backoff with ±50% jitter. Throws on the final failed attempt.
 	/// Delays: attempt 1→2s, 2→4s, 3→8s (before jitter), base controlled by <paramref name="baseDelaySeconds"/>.
 	/// </summary>
+	/// <param name="isRetriable">
+	/// Optional predicate; return false to abort retries immediately and propagate the exception.
+	/// Default (null) retries on any exception. Use this to skip retries on permanent errors
+	/// like HTTP 4xx where retrying the same request will never succeed.
+	/// </param>
 	public static async Task RetryWithBackoffAsync(
 		Func<Task> action,
 		int maxAttempts = 3,
 		double baseDelaySeconds = 2.0,
 		ILogger? logger = null,
-		string? operationName = null)
+		string? operationName = null,
+		Func<Exception, bool>? isRetriable = null)
 	{
 		for (int attempt = 1; attempt <= maxAttempts; attempt++)
 		{
@@ -27,7 +33,7 @@ public static class RetryHelper
 				await action();
 				return;
 			}
-			catch (Exception ex) when (attempt < maxAttempts)
+			catch (Exception ex) when (attempt < maxAttempts && (isRetriable?.Invoke(ex) ?? true))
 			{
 				var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1) * baseDelaySeconds);
 				var jitter = TimeSpan.FromSeconds(delay.TotalSeconds * 0.5 * ((_rng.NextDouble() * 2) - 1));

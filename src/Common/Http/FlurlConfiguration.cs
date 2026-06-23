@@ -120,7 +120,7 @@ public static class FlurlConfiguration
 			if (call.Exception is FlurlParsingException fpe)
 			{
 				_logger.Error(fpe, $"Http Failed to deserialize response to target type: {fpe.ExpectedFormat}");
-				_logger.Information("Response: {@HttpStatusCode} - {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
+				_logger.Debug("Response: {@HttpStatusCode} - {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
 					call.HttpResponseMessage?.StatusCode ?? (HttpStatusCode)0,
 					call.HttpRequestMessage?.Method?.Method,
 					call.HttpRequestMessage?.RequestUri,
@@ -137,12 +137,12 @@ public static class FlurlConfiguration
 
 			if (call.Exception is object)
 			{
-				_logger.Information("HTTP Request: {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
+				_logger.Debug("HTTP Request: {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
 					call.HttpRequestMessage.Method?.Method,
 					call.HttpRequestMessage.RequestUri,
 					call.HttpRequestMessage.Headers.ToString(),
 					requestPayload);
-				_logger.Information("HTTP Response: {@HttpStatusCode} - {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
+				_logger.Debug("HTTP Response: {@HttpStatusCode} - {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
 					call.HttpResponseMessage?.StatusCode ?? (HttpStatusCode)0,
 					call.HttpRequestMessage?.Method?.Method,
 					call.HttpRequestMessage?.RequestUri,
@@ -151,12 +151,12 @@ public static class FlurlConfiguration
 				return;
 			}
 
-			_logger.Information("HTTP Request: {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
+			_logger.Debug("HTTP Request: {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
 				call.HttpRequestMessage.Method?.Method,
 				call.HttpRequestMessage.RequestUri,
 				call.HttpRequestMessage.Headers.ToString(),
 				requestPayload);
-			_logger.Information("HTTP Response: {@HttpStatusCode} - {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
+			_logger.Debug("HTTP Response: {@HttpStatusCode} - {@HttpMethod} - {@Uri} - {@Headers} - {@Content}",
 				call.HttpResponseMessage?.StatusCode ?? (HttpStatusCode)0,
 				call.HttpRequestMessage?.Method?.Method,
 				call.HttpRequestMessage?.RequestUri,
