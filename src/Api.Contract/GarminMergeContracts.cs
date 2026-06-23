@@ -25,6 +25,7 @@ public record GarminMergeRecordDto
 	public DateTime MergedAt { get; init; }
 	public MergeSourceDto Source { get; init; }
 	public MergeStatusDto Status { get; init; }
+	public string? StatusDetail { get; init; }
 }
 
 public record GarminMergePostRequest

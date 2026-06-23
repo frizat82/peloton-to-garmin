@@ -101,6 +101,7 @@ public class GarminMergeRecord
 	public DateTime MergedAt { get; set; }
 	public MergeSource Source { get; set; }
 	public MergeStatus Status { get; set; } = MergeStatus.Success;
+	public string StatusDetail { get; set; }
 }
 
 public enum MergeSource { Auto, Manual }
