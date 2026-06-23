@@ -246,18 +246,12 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 		var mergeStatus = MergeStatus.Success;
 		string mergeStatusDetail = null;
-		var discipline = primary.P2GWorkout.Workout.Fitness_Discipline;
-		var cyclingFitMerge = settings.Garmin.MergeFitWithWatch
-			&& (discipline is FitnessDiscipline.Cycling or FitnessDiscipline.Bike_Bootcamp);
-		if (cyclingFitMerge)
+		if (settings.Garmin.MergeFitWithWatch)
 		{
 			(mergeStatus, mergeStatusDetail) = await ApplyFitMergeAsync(garminActivityId, primary, group, auth);
 		}
 		else
 		{
-			if (settings.Garmin.MergeFitWithWatch && !cyclingFitMerge)
-				_logger.Information("FIT merge skipped for {Discipline} activity {GarminActivityId} — FIT merge is cycling-only; using metadata update instead.", discipline, garminActivityId);
-
 			var updateRequest = new GarminActivityUpdateRequest
 			{
 				ActivityId = garminActivityId,

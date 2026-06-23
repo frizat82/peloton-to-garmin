@@ -328,16 +328,21 @@ public static class GarminFitMergeService
 		{
 			if (result[i].Num != MesgNum.Session) continue;
 
+			// Snapshot which field numbers the watch actually defined in this Session.
+			// We only supplement fields the watch already declared — never create new ones.
+			// (Field 18=AvgCadence, 19=MaxCadence, 20=AvgPower, 21=MaxPower in FIT profile)
+			var watchSessionFields = new HashSet<byte>(result[i].Fields.Select(f => f.Num));
+
 			var session = new SessionMesg(result[i]);
 			bool modified = false;
 
-			if (session.GetAvgCadence() is null or 0 && pelotonAvgCadence is not null)
+			if (watchSessionFields.Contains(18) && session.GetAvgCadence() is null or 0 && pelotonAvgCadence is not null)
 			{ session.SetAvgCadence(pelotonAvgCadence.Value); modified = true; }
-			if (session.GetMaxCadence() is null or 0 && pelotonMaxCadence is not null)
+			if (watchSessionFields.Contains(19) && session.GetMaxCadence() is null or 0 && pelotonMaxCadence is not null)
 			{ session.SetMaxCadence(pelotonMaxCadence.Value); modified = true; }
-			if (session.GetAvgPower() is null or 0 && pelotonAvgPower is not null)
+			if (watchSessionFields.Contains(20) && session.GetAvgPower() is null or 0 && pelotonAvgPower is not null)
 			{ session.SetAvgPower(pelotonAvgPower.Value); modified = true; }
-			if (session.GetMaxPower() is null or 0 && pelotonMaxPower is not null)
+			if (watchSessionFields.Contains(21) && session.GetMaxPower() is null or 0 && pelotonMaxPower is not null)
 			{ session.SetMaxPower(pelotonMaxPower.Value); modified = true; }
 
 			if (modified)
