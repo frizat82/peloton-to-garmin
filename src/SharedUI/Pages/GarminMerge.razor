@@ -76,11 +76,11 @@
                         <ItemTemplate>
                             @if (context.Status == MergeStatusDto.OriginalRestored)
                             {
-                                <HxBadge Color="ThemeColor.Warning" title="Merged FIT upload failed after retries — original watch activity was restored. No Peloton data.">Restored</HxBadge>
+                                <HxBadge Color="ThemeColor.Warning" title="@($"Original restored. {context.StatusDetail}")">Restored</HxBadge>
                             }
                             else if (context.Status == MergeStatusDto.RestoreFailed)
                             {
-                                <HxBadge Color="ThemeColor.Danger" title="Merged FIT upload failed and restore also failed. Download backup from the table below.">Failed</HxBadge>
+                                <HxBadge Color="ThemeColor.Danger" title="@($"Upload and restore both failed. {context.StatusDetail}")">Failed</HxBadge>
                             }
                             else
                             {

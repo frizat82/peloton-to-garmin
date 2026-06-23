@@ -53,6 +53,7 @@ public class GarminMergeController : Controller
 					MergeStatus.RestoreFailed => MergeStatusDto.RestoreFailed,
 					_ => MergeStatusDto.Success,
 				},
+				StatusDetail = r.StatusDetail,
 			}).ToList()
 		};
 		return Ok(response);
