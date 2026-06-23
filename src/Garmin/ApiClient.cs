@@ -153,13 +153,24 @@ namespace Garmin
 			var settings = await _settingsService.GetSettingsAsync();
 
 			var fileName = Path.GetFileName(filePath);
-			var rawJson = await WithConnectApiHeaders($"{settings.Garmin.Api.UploadActivityUrl}/{format}", auth, settings.Garmin.Api)
-				.AllowHttpStatus("2xx,409")
-				.PostMultipartAsync((data) =>
-				{
-					data.AddFile("\"file\"", path: filePath, contentType: "application/octet-stream", fileName: $"\"{fileName}\"");
-				})
-				.ReceiveString();
+			string rawJson;
+			try
+			{
+				rawJson = await WithConnectApiHeaders($"{settings.Garmin.Api.UploadActivityUrl}/{format}", auth, settings.Garmin.Api)
+					.AllowHttpStatus("2xx,409")
+					.PostMultipartAsync((data) =>
+					{
+						data.AddFile("\"file\"", path: filePath, contentType: "application/octet-stream", fileName: $"\"{fileName}\"");
+					})
+					.ReceiveString();
+			}
+			catch (FlurlHttpException ex)
+			{
+				var body = await ex.GetResponseStringAsync() ?? string.Empty;
+				_logger.Error("Garmin upload rejected HTTP {StatusCode} for {File}. Garmin response: {Body}",
+					ex.StatusCode, fileName, body);
+				throw;
+			}
 			_logger.Debug("Upload response: {Json}", rawJson);
 			var response = System.Text.Json.JsonSerializer.Deserialize<UploadResponse>(rawJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 

@@ -4,6 +4,7 @@ using Common.Helpers;
 using Common.Observe;
 using Common.Service;
 using Conversion;
+using Flurl.Http;
 using Garmin.Auth;
 using Garmin.Database;
 using Garmin.Dto;
@@ -340,7 +341,8 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				maxAttempts: 3,
 				baseDelaySeconds: 2.0,
 				logger: _logger,
-				operationName: $"FIT merge upload {garminActivityId}");
+				operationName: $"FIT merge upload {garminActivityId}",
+				isRetriable: ex => !(ex is FlurlHttpException fhe && fhe.StatusCode == 415));
 			_logger.Information("FIT merge: uploaded merged FIT for original activity {GarminActivityId}", garminActivityId);
 
 			long? newActivityId = null;
