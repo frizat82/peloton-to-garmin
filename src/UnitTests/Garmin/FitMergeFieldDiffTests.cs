@@ -59,8 +59,11 @@ public class FitMergeFieldDiffTests
 
 	private static void RunDiff(string label, string fitPath, WorkoutSamples samples)
 	{
-		Assert.That(System.IO.File.Exists(fitPath), Is.True,
-			$"FIT file not found: {fitPath}");
+		if (!System.IO.File.Exists(fitPath))
+		{
+			Assert.Ignore($"Local-only diagnostic test — FIT file not present: {fitPath}");
+			return;
+		}
 
 		var originalBytes = System.IO.File.ReadAllBytes(fitPath);
 		var workoutStartUnix = DateTimeOffset.UtcNow.AddMinutes(-60).ToUnixTimeSeconds();
