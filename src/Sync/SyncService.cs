@@ -269,6 +269,7 @@ namespace Sync
 			}
 
 			response.SyncSuccess = true;
+			_logger.Information("Sync complete: {Count} workout(s) uploaded to Garmin.", workoutIds.Count());
 			await _syncedWorkoutsDb.MarkSyncedAsync(workoutIds);
 			return response;
 		}
@@ -310,6 +311,8 @@ namespace Sync
 		private async Task<SyncResult> SyncWithWorkoutLoaderAsync(Func<Task<ServiceResult<ICollection<Workout>>>> loader, ICollection<WorkoutType>? exclude, bool forceStackClasses = false)
 		{
 			using var activity = Tracing.Trace($"{nameof(SyncService)}.{nameof(SyncAsync)}.SyncWithWorkoutLoaderAsync");
+
+			_logger.Information("Sync started.");
 
 			ICollection<Workout> recentWorkouts;
 			var syncTime = await _db.GetSyncStatusAsync();
@@ -371,7 +374,14 @@ namespace Sync
 			var result = await SyncAsync(unsynced, settings.Peloton.ExcludeWorkoutTypes, forceStackClasses);
 
 			if (result.SyncSuccess)
+			{
 				syncTime.LastSuccessfulSyncTime = DateTime.Now;
+				_logger.Information("Sync completed successfully.");
+			}
+			else
+			{
+				_logger.Warning("Sync completed with errors. Check logs above for details.");
+			}
 
 			await _db.UpsertSyncStatusAsync(syncTime);
 
