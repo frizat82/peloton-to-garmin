@@ -40,6 +40,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 
 ObservabilityStartup.ConfigureWebUI(builder.Services, builder.Configuration, config);
+builder.Host.UseSerilog();
 Common.Observe.Metrics.CreateAppInfo();
 
 ///////////////////////////////////////////////////////////

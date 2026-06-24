@@ -271,6 +271,9 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 		foreach (var (p2gWorkout, result) in group)
 		{
+			result.MergeStatus = mergeStatus;
+			result.StatusDetail = mergeStatusDetail;
+
 			await _mergeDb.SaveAsync(new GarminMergeRecord
 			{
 				PelotonWorkoutId = result.PelotonWorkoutId,
@@ -735,6 +738,12 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 			var filename = $"{workoutStartUtc:yyyy-MM-dd}_{garminActivityId}_{safeTitle}.fit";
 			var fullPath = Path.Join(dir, filename);
+
+			if (File.Exists(fullPath) && new FileInfo(fullPath).Length > 0)
+			{
+				_logger.Debug("FIT merge: backup already exists for activity {ActivityId}, skipping", garminActivityId);
+				return;
+			}
 
 			await File.WriteAllBytesAsync(fullPath, fitBytes);
 			_logger.Information("FIT merge: saved original watch FIT backup to {Path} ({Bytes} bytes)", fullPath, fitBytes.Length);

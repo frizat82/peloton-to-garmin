@@ -52,6 +52,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.ConfigureP2GApiServices();
 
 ObservabilityStartup.ConfigureApi(builder.Services, builder.Configuration, config);
+builder.Host.UseSerilog();
 Common.Observe.Metrics.CreateAppInfo();
 
 ///////////////////////////////////////////////////////////
