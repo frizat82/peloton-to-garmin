@@ -25,16 +25,18 @@ public class FitMergeFieldDiffTests
 	[Test]
 	public void DiffFields_RowingFit()
 	{
-		var fitPath = Path.Combine(DownloadsDir,
-			"2026-06-19_23308810534_15 min Tabata Row with Alex Karwoski.fit");
+		var fitPath = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads",
+			"2026-06-22_23356010307_20 min Tabata Row with Alex Karwoski.fit");
 		RunDiff("ROWING", fitPath, BuildRowingSamples());
 	}
 
 	[Test]
 	public void DiffFields_StrengthFit()
 	{
-		var fitPath = Path.Combine(DownloadsDir,
-			"2026-06-19_23308809916_30 min Upper Body Strength with Rad Lopez.fit");
+		var fitPath = Path.Combine(
+			Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads",
+			"2026-06-22_23356005594_30 min Glutes & Legs Strength with Rad Lopez.fit");
 		RunDiff("STRENGTH", fitPath, BuildStrengthSamples());
 	}
 

@@ -122,4 +122,6 @@ public class GarminEnrichmentResult
 	public DateTime? GarminActivityStartTimeUtc { get; set; }
 	public double MatchDeltaSeconds { get; set; }
 	public bool HasMatch { get; set; }
+	public MergeStatus MergeStatus { get; set; } = MergeStatus.Success;
+	public string? StatusDetail { get; set; }
 }

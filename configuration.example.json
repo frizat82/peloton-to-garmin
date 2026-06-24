@@ -54,7 +54,10 @@
           "Microsoft": "Error",
           "System": "Error"
         }
-      }
+      },
+      "WriteTo": [
+        { "Name": "Console" }
+      ]
     }
   }
 }

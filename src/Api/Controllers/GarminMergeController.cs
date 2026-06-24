@@ -188,9 +188,15 @@ public class GarminMergeController : Controller
 				return Ok(new GarminMergePostResponse { Success = false, Message = errorMessage });
 			}
 
-			// Manual merge always processes a single workout, so EnrichedWorkoutIds contains it directly (no comma-joining).
-			if (syncResult.MergeResults.Any(r => r.PelotonWorkoutId == request.WorkoutId))
+			var mergeResult = syncResult.MergeResults.FirstOrDefault(r => r.PelotonWorkoutId == request.WorkoutId);
+			if (mergeResult is not null)
+			{
+				if (mergeResult.MergeStatus == MergeStatus.OriginalRestored)
+					return Ok(new GarminMergePostResponse { Success = false, Message = $"Merge failed — original activity restored. {mergeResult.StatusDetail}" });
+				if (mergeResult.MergeStatus == MergeStatus.RestoreFailed)
+					return Ok(new GarminMergePostResponse { Success = false, Message = $"Merge failed and restore also failed. {mergeResult.StatusDetail}" });
 				return Ok(new GarminMergePostResponse { Success = true, Message = "Workout merged into existing Garmin activity." });
+			}
 
 			return Ok(new GarminMergePostResponse { Success = true, Message = "No matching Garmin activity found. Workout uploaded as new activity." });
 		}
