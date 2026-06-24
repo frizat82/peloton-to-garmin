@@ -50,7 +50,11 @@ public static class ObservabilityStartup
 						.ReadFrom.Configuration(configManager, options)
 						.MinimumLevel.ControlledBy(Logging.InternalLevelSwitch);
 
-		loggingConfig.WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss}][{Level:u3}][{SourceContext}] {Message:lj}{NewLine}{Exception}");
+		loggingConfig
+			.WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss}][{Level:u3}][{SourceContext}] {Message:lj}{NewLine}{Exception}")
+			.MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Error)
+			.MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Error)
+			.MinimumLevel.Override("Microsoft.Hosting.Lifetime", Serilog.Events.LogEventLevel.Information);
 
 		// Always write to app defined log file
 		loggingConfig.WriteTo.File(
