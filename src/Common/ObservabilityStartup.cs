@@ -50,6 +50,8 @@ public static class ObservabilityStartup
 						.ReadFrom.Configuration(configManager, options)
 						.MinimumLevel.ControlledBy(Logging.InternalLevelSwitch);
 
+		loggingConfig.WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss}][{Level:u3}][{SourceContext}] {Message:lj}{NewLine}{Exception}");
+
 		// Always write to app defined log file
 		loggingConfig.WriteTo.File(
 				Path.Join(Statics.DefaultOutputDirectory, $"{Statics.AppType}_log.txt"),
