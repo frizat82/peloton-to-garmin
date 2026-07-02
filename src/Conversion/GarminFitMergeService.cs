@@ -46,7 +46,17 @@ public static class GarminFitMergeService
 		var avgPower = GetAvgPower(pelotonSamples);
 		var maxPower = GetMaxPower(pelotonSamples);
 
-		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps, maxSpeedMps, avgCadence, maxCadence, avgPower, maxPower);
+		// Cycling watches without a cadence/power sensor won't declare those fields,
+		// but Garmin accepts new field definitions in cycling FITs. Always inject for cycling.
+		// Rowing/strength keep the supplement-only guard to prevent 415 rejections.
+		var sessionSport = allMessages
+			.Where(m => m.Num == MesgNum.Session)
+			.Select(m => (Sport?)new SessionMesg(m).GetSport())
+			.FirstOrDefault();
+		var isCycling = sessionSport == Sport.Cycling;
+		_logger.Information("FIT merge: sport={Sport} isCycling={IsCycling}", sessionSport, isCycling);
+
+		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps, maxSpeedMps, avgCadence, maxCadence, avgPower, maxPower, isCycling);
 
 		return EncodeMessages(mergedMessages);
 	}
@@ -182,7 +192,8 @@ public static class GarminFitMergeService
 		byte? pelotonAvgCadence,
 		byte? pelotonMaxCadence,
 		ushort? pelotonAvgPower,
-		ushort? pelotonMaxPower)
+		ushort? pelotonMaxPower,
+		bool isCycling)
 	{
 		int enriched = 0;
 		int speedInjected = 0;
@@ -249,16 +260,17 @@ public static class GarminFitMergeService
 					speedInjected++;
 				}
 
-				// Power: watch value wins; only if watch declared field 7
-				if (watchRecordFields.Contains(7) && record.GetPower() is null or 0 && sample.Power is not null)
+				// Power: cycling always injects (Peloton is the only source on an indoor bike;
+				// Garmin accepts new field definitions in cycling FITs). Non-cycling: only if declared.
+				if ((isCycling || watchRecordFields.Contains(7)) && record.GetPower() is null or 0 && sample.Power is not null)
 					record.SetPower(sample.Power.Value);
 
-				// Cadence: watch value wins; only if watch declared field 4
-				if (watchRecordFields.Contains(4) && record.GetCadence() is null or 0 && sample.Cadence is not null)
+				// Cadence: same logic as power
+				if ((isCycling || watchRecordFields.Contains(4)) && record.GetCadence() is null or 0 && sample.Cadence is not null)
 					record.SetCadence(sample.Cadence.Value);
 
-				// Resistance: only if watch declared field 29
-				if (watchRecordFields.Contains(29) && record.GetResistance() is null or 0 && sample.Resistance is not null)
+				// Resistance: same logic as power
+				if ((isCycling || watchRecordFields.Contains(29)) && record.GetResistance() is null or 0 && sample.Resistance is not null)
 					record.SetResistance(sample.Resistance.Value);
 
 				enriched++;
@@ -303,21 +315,23 @@ public static class GarminFitMergeService
 			var session = new SessionMesg(result[i]);
 			bool modified = false;
 
-			// Distance / speed (field 9, 14, 15, 124, 125) — single session only
+			// Distance / speed (field 9, 14, 15, 124, 125) — single session only.
+			// Cycling bypasses field guard: indoor bikes have no GPS so watch session
+			// won't declare these, but Garmin accepts them in cycling FITs.
 			if (isSingleSession && pelotonTotalDistanceMeters > 0)
 			{
 				var existingDistance = session.GetTotalDistance();
 				if (existingDistance is null or 0)
 				{
-					if (watchSessionFields.Contains(9))
+					if (isCycling || watchSessionFields.Contains(9))
 					{ session.SetTotalDistance(pelotonTotalDistanceMeters); modified = true; }
-					if (pelotonAvgSpeedMps > 0 && watchSessionFields.Contains(14))
+					if (pelotonAvgSpeedMps > 0 && (isCycling || watchSessionFields.Contains(14)))
 					{ session.SetAvgSpeed(pelotonAvgSpeedMps); modified = true; }
-					if (pelotonAvgSpeedMps > 0 && watchSessionFields.Contains(124))
+					if (pelotonAvgSpeedMps > 0 && (isCycling || watchSessionFields.Contains(124)))
 					{ session.SetEnhancedAvgSpeed(pelotonAvgSpeedMps); modified = true; }
-					if (pelotonMaxSpeedMps > 0 && watchSessionFields.Contains(15))
+					if (pelotonMaxSpeedMps > 0 && (isCycling || watchSessionFields.Contains(15)))
 					{ session.SetMaxSpeed(pelotonMaxSpeedMps); modified = true; }
-					if (pelotonMaxSpeedMps > 0 && watchSessionFields.Contains(125))
+					if (pelotonMaxSpeedMps > 0 && (isCycling || watchSessionFields.Contains(125)))
 					{ session.SetEnhancedMaxSpeed(pelotonMaxSpeedMps); modified = true; }
 
 					if (modified)
@@ -330,14 +344,15 @@ public static class GarminFitMergeService
 				}
 			}
 
-			// Cadence / power (field 18, 19, 20, 21)
-			if (watchSessionFields.Contains(18) && session.GetAvgCadence() is null or 0 && pelotonAvgCadence is not null)
+			// Cadence / power (field 18, 19, 20, 21).
+			// Cycling bypasses field guard: watch without sensors won't declare these.
+			if ((isCycling || watchSessionFields.Contains(18)) && session.GetAvgCadence() is null or 0 && pelotonAvgCadence is not null)
 			{ session.SetAvgCadence(pelotonAvgCadence.Value); modified = true; }
-			if (watchSessionFields.Contains(19) && session.GetMaxCadence() is null or 0 && pelotonMaxCadence is not null)
+			if ((isCycling || watchSessionFields.Contains(19)) && session.GetMaxCadence() is null or 0 && pelotonMaxCadence is not null)
 			{ session.SetMaxCadence(pelotonMaxCadence.Value); modified = true; }
-			if (watchSessionFields.Contains(20) && session.GetAvgPower() is null or 0 && pelotonAvgPower is not null)
+			if ((isCycling || watchSessionFields.Contains(20)) && session.GetAvgPower() is null or 0 && pelotonAvgPower is not null)
 			{ session.SetAvgPower(pelotonAvgPower.Value); modified = true; }
-			if (watchSessionFields.Contains(21) && session.GetMaxPower() is null or 0 && pelotonMaxPower is not null)
+			if ((isCycling || watchSessionFields.Contains(21)) && session.GetMaxPower() is null or 0 && pelotonMaxPower is not null)
 			{ session.SetMaxPower(pelotonMaxPower.Value); modified = true; }
 
 			if (modified)
