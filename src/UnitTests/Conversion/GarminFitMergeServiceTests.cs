@@ -171,6 +171,26 @@ public class GarminFitMergeServiceTests
 	}
 
 	[Test]
+	public void Merge_Cycling_InjectsMetrics_WhenWatchHasNoSensors()
+	{
+		// Cycling watch with NO cadence/power sensor — fields 4 and 7 are not declared.
+		// After merge, Peloton power and cadence MUST appear (cycling bypasses field guard).
+		var fitBytes = BuildMinimalFit(Sport.Cycling, includeSpeed: false, includePower: false, includeCadence: false);
+		var samples = BuildSamples(cadenceSlug: "cadence", speedKph: 30.0, powerWatts: 200);
+		var workoutStart = DateTimeOffset.UtcNow.AddMinutes(-21).ToUnixTimeSeconds();
+
+		var before = GetFieldNums(fitBytes, MesgNum.Record);
+		before.Should().NotContain(7, "pre-condition: watch FIT must not have Power field 7");
+		before.Should().NotContain(4, "pre-condition: watch FIT must not have Cadence field 4");
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples, workoutStart);
+		var after = GetFieldNums(merged, MesgNum.Record);
+
+		after.Should().Contain(7, "cycling must inject Power (field 7) even when watch never declared it");
+		after.Should().Contain(4, "cycling must inject Cadence (field 4) even when watch never declared it");
+	}
+
+	[Test]
 	public void Merge_Cycling_SupplementsExistingFields()
 	{
 		// Cycling watch with cadence/power declared but zero — Peloton values should fill them

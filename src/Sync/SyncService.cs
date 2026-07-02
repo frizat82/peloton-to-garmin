@@ -293,16 +293,31 @@ namespace Sync
 			return await _enrichmentService.PreviewAsync(workouts);
 		}
 
+		private const int SyncDelayMinutes = 30;
+
 		private IEnumerable<string> FilterToCompletedWorkoutIds(ICollection<Workout> workouts)
 		{
+			var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 			return workouts?
 					.Where(w =>
 					{
-						var shouldKeep = w.Status == "COMPLETE";
-						if (shouldKeep) return true;
+						if (w.Status != "COMPLETE")
+						{
+							_logger.Debug("Skipping in progress workout. {@WorkoutId} {@WorkoutStatus} {@WorkoutType} {@WorkoutTitle}", w.Id, w.Status, w.Fitness_Discipline, w.Title);
+							return false;
+						}
 
-						_logger.Debug("Skipping in progress workout. {@WorkoutId} {@WorkoutStatus} {@WorkoutType} {@WorkoutTitle}", w.Id, w.Status, w.Fitness_Discipline, w.Title);
-						return false;
+						if (w.End_Time.HasValue)
+						{
+							var elapsedMinutes = (nowUnix - w.End_Time.Value) / 60.0;
+							if (elapsedMinutes < SyncDelayMinutes)
+							{
+								_logger.Information("Skipping recent workout {WorkoutId} — ended {Elapsed:F0} min ago, waiting {Delay} min for Garmin watch sync", w.Id, elapsedMinutes, SyncDelayMinutes);
+								return false;
+							}
+						}
+
+						return true;
 					})
 					.Select(r => r.Id) ?? new List<string>();
 		}
