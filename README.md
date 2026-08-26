@@ -123,6 +123,8 @@ Configuration can be passed as environment variables using the `P2G_` prefix wit
 | `P2G_FORMAT__INCLUDETIMEINHRZONES` | `false` | Embed Peloton HR zone durations in FIT file. Leave `false` to let Garmin calculate zones from your Max HR setting. |
 | `P2G_APP__ENABLEPOLLING` | `false` | Enable automatic background syncing |
 | `P2G_APP__POLLINGINTERVALSECONDS` | `86400` | How often to sync (seconds) |
+| `P2G_NOTIFICATIONS__DISCORDWEBHOOKURL` | — | Discord webhook URL for sync notifications. If unset, notifications are disabled. |
+| `P2G_NOTIFICATIONS__NOTIFYONSUCCESS` | `false` | Set to `true` to also receive a Discord message on successful syncs. Failures always notify when a webhook is configured. |
 
 Full configuration reference: [Wiki](https://philosowaffle.github.io/peloton-to-garmin)
 
