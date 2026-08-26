@@ -24,6 +24,7 @@ public static class ApiStartupServices
 	{
 		// HOSTED SERVICES
 		services.AddHostedService<BackgroundSyncJob>();
+		services.AddHttpClient();
 
 		// CACHE
 		services.AddSingleton<IMemoryCache, MemoryCache>();

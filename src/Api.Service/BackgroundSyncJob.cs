@@ -8,6 +8,7 @@ using Prometheus;
 using Sync;
 using Sync.Database;
 using Sync.Dto;
+using System.Net.Http;
 using static Common.Observe.Metrics;
 using ILogger = Serilog.ILogger;
 using PromMetrics = Prometheus.Metrics;
@@ -26,12 +27,13 @@ public class BackgroundSyncJob : BackgroundService
 	private readonly ISyncStatusDb _syncStatusDb;
 	private readonly ISyncService _syncService;
 	private readonly IGarminAuthenticationService _garminAuthService;
+	private readonly IHttpClientFactory _httpClientFactory;
 
 	private bool? _previousPollingState;
 	private Settings _config;
 
 
-	public BackgroundSyncJob(ISettingsService settingsService, ISyncStatusDb syncStatusDb, ISyncService syncService, IGarminAuthenticationService garminAuthService)
+	public BackgroundSyncJob(ISettingsService settingsService, ISyncStatusDb syncStatusDb, ISyncService syncService, IGarminAuthenticationService garminAuthService, IHttpClientFactory httpClientFactory)
 	{
 		_settingsService = settingsService;
 		_syncStatusDb = syncStatusDb;
@@ -41,6 +43,7 @@ public class BackgroundSyncJob : BackgroundService
 
 		_config = new Settings();
 		_garminAuthService = garminAuthService;
+		_httpClientFactory = httpClientFactory;
 	}
 
 	protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -126,9 +129,20 @@ public class BackgroundSyncJob : BackgroundService
 		return false;
 	}
 
+	private IDiscordNotificationService BuildNotifier()
+	{
+		var n = _config.Notifications;
+		if (string.IsNullOrWhiteSpace(n?.DiscordWebhookUrl))
+			return new NullDiscordNotificationService();
+
+		return new DiscordNotificationService(n.DiscordWebhookUrl, n.NotifyOnSuccess, _httpClientFactory.CreateClient());
+	}
+
 	private async Task SyncAsync()
 	{
 		using var tracing = Tracing.Trace($"{nameof(BackgroundService)}.{nameof(SyncAsync)}");
+
+		var notifier = BuildNotifier();
 
 		try
 		{
@@ -136,17 +150,22 @@ public class BackgroundSyncJob : BackgroundService
 			if (result.SyncSuccess)
 			{
 				Health.Set(HealthStatus.Healthy);
+				await notifier.SendSuccessAsync(result.MergeResults?.Count ?? 0);
 			}
 			else
 			{
 				Health.Set(HealthStatus.UnHealthy);
+				var errorMsg = result.Errors?.Count > 0
+					? string.Join("; ", System.Linq.Enumerable.Select(result.Errors, e => e.Message))
+					: "Unknown error — check logs.";
+				await notifier.SendFailureAsync(errorMsg);
 			}
 
 		}
 		catch (Exception e)
 		{
 			_logger.Error(e, "Uncaught Exception.");
-
+			await notifier.SendFailureAsync(e.Message);
 		}
 		finally
 		{

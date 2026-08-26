@@ -18,12 +18,20 @@ public class Settings
 		Format = new();
 		Peloton = new();
 		Garmin = new();
+		Notifications = new();
 	}
 
 	public App App { get; set; }
 	public Format Format { get; set; }
 	public PelotonSettings Peloton { get; set; }
 	public GarminSettings Garmin { get; set; }
+	public NotificationSettings Notifications { get; set; }
+}
+
+public class NotificationSettings
+{
+	public string DiscordWebhookUrl { get; set; }
+	public bool NotifyOnSuccess { get; set; } = false;
 }
 
 public class App
