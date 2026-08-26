@@ -103,7 +103,7 @@ docker compose up -d
 
 Then open `http://localhost:8002` in your browser to configure your Peloton and Garmin credentials and start syncing.
 
-> **Note:** The WebUI and GitHub Actions deployment methods store credentials encrypted at rest. See the [Warnings](#warnings) section below for the Console/headless deployment caveat.
+> **Note:** The WebUI deployment method stores credentials encrypted at rest. See the [Warnings](#warnings) section below for the Console/headless deployment caveat.
 
 ## Local Development
 
@@ -150,7 +150,7 @@ If you're interested in contributing to P2G, [start here](https://philosowaffle.
 
 ⚠️ WARNING!!! For the Console or Docker Headless deployments your username and password for Peloton and Garmin Connect are stored in clear text, WHICH IS NOT SECURE. If you have concerns about storing your credentials in an unsecure file, do not use this option.
 
-This warning does not apply to Docker WebUI nor GitHub Actions deployments. Both of these methods store credentials encrypted at rest.
+This warning does not apply to the Docker WebUI deployment, which stores credentials encrypted at rest.
 
 ## Donate
 <a href="https://www.buymeacoffee.com/philosowaffle" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/black_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
