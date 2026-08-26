@@ -105,6 +105,27 @@ Then open `http://localhost:8002` in your browser to configure your Peloton and 
 
 > **Note:** The WebUI deployment method stores credentials encrypted at rest. See the [Warnings](#warnings) section below for the Console/headless deployment caveat.
 
+## Key Environment Variables
+
+Configuration can be passed as environment variables using the `P2G_` prefix with `__` as the section separator.
+
+| Variable | Default | Description |
+|---|---|---|
+| `P2G_PELOTON__EMAIL` | — | Peloton account email |
+| `P2G_PELOTON__PASSWORD` | — | Peloton account password |
+| `P2G_PELOTON__NUMWORKOUTSTODOWNLOAD` | `5` | Number of recent workouts to check each sync |
+| `P2G_GARMIN__EMAIL` | — | Garmin Connect email |
+| `P2G_GARMIN__PASSWORD` | — | Garmin Connect password |
+| `P2G_GARMIN__UPLOAD` | `false` | Enable uploading to Garmin Connect |
+| `P2G_FORMAT__FIT` | `false` | Convert workouts to FIT format |
+| `P2G_FORMAT__TCX` | `false` | Convert workouts to TCX format |
+| `P2G_FORMAT__INCLUDETIMEINPOWERZONES` | `false` | Embed Peloton power zone durations in FIT file (cycling only). Leave `false` to let Garmin calculate zones from your Garmin FTP. |
+| `P2G_FORMAT__INCLUDETIMEINHRZONES` | `false` | Embed Peloton HR zone durations in FIT file. Leave `false` to let Garmin calculate zones from your Max HR setting. |
+| `P2G_APP__ENABLEPOLLING` | `false` | Enable automatic background syncing |
+| `P2G_APP__POLLINGINTERVALSECONDS` | `86400` | How often to sync (seconds) |
+
+Full configuration reference: [Wiki](https://philosowaffle.github.io/peloton-to-garmin)
+
 ## Local Development
 
 Both the **API** and **WebUI** must run together — the WebUI is a Blazor frontend that calls the API for all data.
