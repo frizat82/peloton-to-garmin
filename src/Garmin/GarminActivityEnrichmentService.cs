@@ -249,7 +249,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		string mergeStatusDetail = null;
 		if (settings.Garmin.MergeFitWithWatch)
 		{
-			(mergeStatus, mergeStatusDetail) = await ApplyFitMergeAsync(garminActivityId, primary, group, auth);
+			(mergeStatus, mergeStatusDetail) = await ApplyFitMergeAsync(garminActivityId, primary, group, auth, settings);
 		}
 		else
 		{
@@ -291,7 +291,8 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		long garminActivityId,
 		(P2GWorkout P2GWorkout, GarminEnrichmentResult Result) primary,
 		List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group,
-		GarminApiAuthentication auth)
+		GarminApiAuthentication auth,
+		Settings settings = null)
 	{
 		var workoutStart = DateTimeOffset.FromUnixTimeSeconds(primary.P2GWorkout.Workout.Start_Time).UtcDateTime;
 
@@ -330,7 +331,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			BuildActivityName(primary.P2GWorkout.Workout) ?? primary.P2GWorkout.Workout.Id);
 
 		_logger.Information("FIT merge: merging Peloton metrics into watch FIT ({Bytes} bytes)", watchFitBytes.Length);
-		var mergedFitBytes = GarminFitMergeService.MergeWatchFitWithPeloton(watchFitBytes, primary.P2GWorkout.WorkoutSamples, primary.P2GWorkout.Workout.Start_Time);
+		var mergedFitBytes = GarminFitMergeService.MergeWatchFitWithPeloton(watchFitBytes, primary.P2GWorkout.WorkoutSamples, primary.P2GWorkout.Workout.Start_Time, primary.P2GWorkout.Workout, settings?.Format?.IncludeTimeInPowerZones ?? false);
 
 		_logger.Information("FIT merge: deleting original Garmin activity {GarminActivityId} before uploading merged FIT", garminActivityId);
 		await _apiClient.DeleteActivityAsync(garminActivityId, auth);
