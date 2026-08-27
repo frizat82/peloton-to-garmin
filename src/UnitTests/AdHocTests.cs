@@ -5,6 +5,7 @@ using Common.Dto.Peloton;
 using Common.Helpers;
 using Common.Http;
 using Common.Service;
+using Common.Stateful;
 using Conversion;
 using Dynastream.Fit;
 using Flurl;

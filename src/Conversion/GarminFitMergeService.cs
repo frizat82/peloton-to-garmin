@@ -26,7 +26,9 @@ public static class GarminFitMergeService
 	/// <param name="watchFitBytes">Raw FIT bytes downloaded from Garmin Connect.</param>
 	/// <param name="pelotonSamples">Peloton workout samples (power, cadence, speed, resistance).</param>
 	/// <param name="workoutStartUnix">Workout start time as Unix epoch seconds (from Workout.Start_Time).</param>
-	public static byte[] MergeWatchFitWithPeloton(byte[] watchFitBytes, WorkoutSamples pelotonSamples, long workoutStartUnix)
+	/// <param name="workout">Peloton workout metadata (used for power zone injection when enabled).</param>
+	/// <param name="includeTimeInPowerZones">When true and the workout is cycling, injects SetTimeInPowerZone(1-7) into the merged session.</param>
+	public static byte[] MergeWatchFitWithPeloton(byte[] watchFitBytes, WorkoutSamples pelotonSamples, long workoutStartUnix, Workout workout = null, bool includeTimeInPowerZones = false)
 	{
 		using var tracing = Tracing.Trace($"{nameof(GarminFitMergeService)}.{nameof(MergeWatchFitWithPeloton)}");
 
@@ -57,6 +59,9 @@ public static class GarminFitMergeService
 		_logger.Information("FIT merge: sport={Sport} isCycling={IsCycling}", sessionSport, isCycling);
 
 		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps, maxSpeedMps, avgCadence, maxCadence, avgPower, maxPower, isCycling);
+
+		if (includeTimeInPowerZones && isCycling && workout is not null)
+			InjectPowerZones(mergedMessages, workout, pelotonSamples);
 
 		return EncodeMessages(mergedMessages);
 	}
@@ -360,6 +365,50 @@ public static class GarminFitMergeService
 		}
 
 		return result;
+	}
+
+	// ─── Power Zones ─────────────────────────────────────────────────────────
+
+	private static void InjectPowerZones(List<Mesg> messages, Workout workout, WorkoutSamples pelotonSamples)
+	{
+		var ftpMaybe = workout.Ftp_Info?.Ftp;
+		if (ftpMaybe is null || ftpMaybe <= 0) return;
+
+		var outputMetric = pelotonSamples.Metrics?.FirstOrDefault(m => m.Slug == "output");
+		if (outputMetric?.Values is null) return;
+
+		var ftp = (double)ftpMaybe.Value;
+		float z1 = 0, z2 = 0, z3 = 0, z4 = 0, z5 = 0, z6 = 0, z7 = 0;
+
+		foreach (var value in outputMetric.Values)
+		{
+			if (value <= 0.55 * ftp) z1++;
+			else if (value <= 0.75 * ftp) z2++;
+			else if (value <= 0.90 * ftp) z3++;
+			else if (value <= 1.05 * ftp) z4++;
+			else if (value <= 1.20 * ftp) z5++;
+			else if (value <= 1.50 * ftp) z6++;
+			else z7++;
+		}
+
+		for (var i = 0; i < messages.Count; i++)
+		{
+			if (messages[i].Num != MesgNum.Session) continue;
+
+			var session = new SessionMesg(messages[i]);
+			session.SetTimeInPowerZone(1, z1);
+			session.SetTimeInPowerZone(2, z2);
+			session.SetTimeInPowerZone(3, z3);
+			session.SetTimeInPowerZone(4, z4);
+			session.SetTimeInPowerZone(5, z5);
+			session.SetTimeInPowerZone(6, z6);
+			session.SetTimeInPowerZone(7, z7);
+			messages[i] = session;
+
+			_logger.Information("FIT merge: injected time-in-power-zones (FTP={Ftp}, z1={Z1}s z2={Z2}s z3={Z3}s z4={Z4}s z5={Z5}s z6={Z6}s z7={Z7}s)",
+				ftpMaybe, z1, z2, z3, z4, z5, z6, z7);
+			break;
+		}
 	}
 
 	// ─── Encode ──────────────────────────────────────────────────────────────

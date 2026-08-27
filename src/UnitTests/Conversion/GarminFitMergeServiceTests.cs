@@ -309,4 +309,119 @@ public class GarminFitMergeServiceTests
 		GetFieldNums(merged, MesgNum.Session).Should().BeSubsetOf(beforeSession, "no new Session fields on real strength FIT");
 		GetFieldNums(merged, MesgNum.Record).Should().BeSubsetOf(beforeRecord, "no new RecordMesg fields on real strength FIT");
 	}
+
+	// ── Power Zone Tests ──────────────────────────────────────────────────
+
+	private static SessionMesg DecodeSession(byte[] fitBytes)
+	{
+		SessionMesg result = null;
+		using var ms = new MemoryStream(fitBytes);
+		var dec = new Decode();
+		var bc = new MesgBroadcaster();
+		dec.MesgEvent += bc.OnMesg;
+		dec.MesgDefinitionEvent += bc.OnMesgDefinition;
+		bc.MesgEvent += (_, e) =>
+		{
+			if (e.mesg.Num == MesgNum.Session) result = new SessionMesg(e.mesg);
+		};
+		try { dec.Read(ms); } catch { }
+		return result;
+	}
+
+	private static Workout BuildCyclingWorkout(ushort? ftp)
+	{
+		return new Workout
+		{
+			Fitness_Discipline = FitnessDiscipline.Cycling,
+			Start_Time = DateTimeOffset.UtcNow.AddMinutes(-20).ToUnixTimeSeconds(),
+			Ftp_Info = ftp.HasValue ? new FTPInfo { Ftp = ftp.Value } : null,
+		};
+	}
+
+	private static WorkoutSamples BuildSamplesWithPower(params double[] powerValues)
+	{
+		return new WorkoutSamples
+		{
+			Seconds_Since_Pedaling_Start = Enumerable.Range(0, powerValues.Length).ToArray(),
+			Metrics = new List<Metric>
+			{
+				new Metric { Slug = "output", Values = powerValues.Select(v => (double?)v).ToArray(), Average_Value = powerValues.Average(), Max_Value = powerValues.Max() }
+			},
+			Summaries = new List<Summary>(),
+		};
+	}
+
+	[Test]
+	public void PowerZones_NotInjected_WhenFlagIsFalse()
+	{
+		var fitBytes = BuildMinimalFit(Sport.Cycling, includeSpeed: false, includePower: false, includeCadence: false);
+		var workout = BuildCyclingWorkout(ftp: 200);
+		// All power in zone 4 (91-105% of 200 = 182-210W), use 200W
+		var samples = BuildSamplesWithPower(Enumerable.Repeat(200.0, 60).ToArray());
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples,
+			workout.Start_Time, workout, includeTimeInPowerZones: false);
+
+		var session = DecodeSession(merged);
+		session.GetTimeInPowerZone(1).Should().BeNull("zones should not be written when flag is false");
+	}
+
+	[Test]
+	public void PowerZones_NotInjected_WhenNotCycling()
+	{
+		var fitBytes = BuildMinimalFit(Sport.Running, includeSpeed: false, includePower: false, includeCadence: false);
+		var workout = new Workout
+		{
+			Fitness_Discipline = FitnessDiscipline.Running,
+			Start_Time = DateTimeOffset.UtcNow.AddMinutes(-20).ToUnixTimeSeconds(),
+			Ftp_Info = new FTPInfo { Ftp = 200 },
+		};
+		var samples = BuildSamplesWithPower(Enumerable.Repeat(200.0, 60).ToArray());
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples,
+			workout.Start_Time, workout, includeTimeInPowerZones: true);
+
+		var session = DecodeSession(merged);
+		session.GetTimeInPowerZone(1).Should().BeNull("zones not injected for non-cycling workouts");
+	}
+
+	[Test]
+	public void PowerZones_NotInjected_WhenNoFTP()
+	{
+		var fitBytes = BuildMinimalFit(Sport.Cycling, includeSpeed: false, includePower: false, includeCadence: false);
+		var workout = BuildCyclingWorkout(ftp: null);
+		var samples = BuildSamplesWithPower(Enumerable.Repeat(200.0, 60).ToArray());
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples,
+			workout.Start_Time, workout, includeTimeInPowerZones: true);
+
+		var session = DecodeSession(merged);
+		session.GetTimeInPowerZone(1).Should().BeNull("zones not injected when FTP is unknown");
+	}
+
+	[Test]
+	public void PowerZones_Injected_WhenCyclingWithFTP()
+	{
+		var fitBytes = BuildMinimalFit(Sport.Cycling, includeSpeed: false, includePower: false, includeCadence: false);
+		var workout = BuildCyclingWorkout(ftp: 200);
+		var startUnix = workout.Start_Time;
+
+		// 30s zone1 (≤110W = 55% of 200), 20s zone2 (112-150W), 10s zone4 (182-210W)
+		var z1Power = Enumerable.Repeat(100.0, 30);
+		var z2Power = Enumerable.Repeat(130.0, 20);
+		var z4Power = Enumerable.Repeat(200.0, 10);
+		var samples = BuildSamplesWithPower(z1Power.Concat(z2Power).Concat(z4Power).ToArray());
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples,
+			startUnix, workout, includeTimeInPowerZones: true);
+
+		var session = DecodeSession(merged);
+		session.GetTimeInPowerZone(1).Should().Be(30, "30 seconds at 100W (zone1 ≤55% of 200W FTP)");
+		session.GetTimeInPowerZone(2).Should().Be(20, "20 seconds at 130W (zone2 56-75% of 200W FTP)");
+		session.GetTimeInPowerZone(3).Should().Be(0);
+		session.GetTimeInPowerZone(4).Should().Be(10, "10 seconds at 200W (zone4 91-105% of 200W FTP)");
+		session.GetTimeInPowerZone(5).Should().Be(0);
+		session.GetTimeInPowerZone(6).Should().Be(0);
+		session.GetTimeInPowerZone(7).Should().Be(0);
+	}
 }
