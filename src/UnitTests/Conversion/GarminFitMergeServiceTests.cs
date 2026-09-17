@@ -127,7 +127,7 @@ public class GarminFitMergeServiceTests
 	public void Merge_Rowing_NoNewSessionFields()
 	{
 		var fitBytes = BuildMinimalFit(Sport.Rowing, includeSpeed: true, includePower: true, includeCadence: true);
-		var samples = BuildSamples(cadenceSlug: "spm", speedKph: null, powerWatts: 180);
+		var samples = BuildSamples(cadenceSlug: "stroke_rate", speedKph: null, powerWatts: 180);
 		var workoutStart = DateTimeOffset.UtcNow.AddMinutes(-21).ToUnixTimeSeconds();
 
 		var before = GetFieldNums(fitBytes, MesgNum.Session);
@@ -135,6 +135,36 @@ public class GarminFitMergeServiceTests
 		var after = GetFieldNums(merged, MesgNum.Session);
 
 		after.Should().BeSubsetOf(before, "supplement-only rule: no new Session fields on rowing");
+	}
+
+	[Test]
+	public void Merge_Rowing_StrokeRateCadence_InjectedWhenWatchHasNone()
+	{
+		// Watch has no cadence values — Peloton stroke_rate (80 spm) should fill the zeros
+		var fitBytes = BuildMinimalFit(Sport.Rowing, includeSpeed: false, includePower: false, includeCadence: false);
+		var samples = BuildSamples(cadenceSlug: "stroke_rate", speedKph: null, powerWatts: 180);
+		var workoutStart = DateTimeOffset.UtcNow.AddMinutes(-21).ToUnixTimeSeconds();
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples, workoutStart);
+
+		// Decode and verify at least one record has non-zero cadence from the stroke_rate metric
+		var cadenceValues = new List<byte>();
+		using var ms = new MemoryStream(merged);
+		var dec = new Decode();
+		var bc = new MesgBroadcaster();
+		dec.MesgEvent += bc.OnMesg;
+		dec.MesgDefinitionEvent += bc.OnMesgDefinition;
+		bc.MesgEvent += (_, e) =>
+		{
+			if (e.mesg.Num == MesgNum.Record)
+			{
+				var r = new RecordMesg(e.mesg);
+				if (r.GetCadence() is byte c) cadenceValues.Add(c);
+			}
+		};
+		try { dec.Read(ms); } catch { }
+
+		cadenceValues.Should().Contain(c => c > 0, "stroke_rate from Peloton should inject non-zero cadence for rowing when watch had none");
 	}
 
 	[Test]
