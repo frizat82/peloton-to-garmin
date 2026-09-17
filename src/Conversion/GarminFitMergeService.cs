@@ -485,7 +485,8 @@ public static class GarminFitMergeService
 	{
 		var allMetrics = samples?.Metrics ?? new List<Metric>();
 		return allMetrics.FirstOrDefault(m => m.Slug == "cadence")
-			?? allMetrics.FirstOrDefault(m => m.Slug == "spm");  // rowing strokes-per-minute
+			?? allMetrics.FirstOrDefault(m => m.Slug == "stroke_rate")  // Peloton rowing slug
+			?? allMetrics.FirstOrDefault(m => m.Slug == "spm");
 	}
 
 	private static Metric GetSpeedSummary(WorkoutSamples samples)
