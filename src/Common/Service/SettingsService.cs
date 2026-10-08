@@ -46,6 +46,11 @@ public class SettingsService : ISettingsService
 		if (!settings.Format.DeviceInfoSettings.TryGetValue(WorkoutType.None, out var _))
 			settings.Format.DeviceInfoSettings.Add(WorkoutType.None, Format.DefaultDeviceInfoSettings[WorkoutType.None]);
 
+		// P2G_FORMAT__* and P2G_NOTIFICATIONS__* override the saved settings, but only for the keys actually set.
+		_configurationLoader?.GetSection(nameof(Format))?.Bind(settings.Format);
+		settings.Notifications ??= new NotificationSettings();
+		_configurationLoader?.GetSection(nameof(Settings.Notifications))?.Bind(settings.Notifications);
+
 		return settings;
 	}
 

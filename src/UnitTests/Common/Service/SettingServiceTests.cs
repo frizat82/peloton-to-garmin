@@ -5,6 +5,7 @@ using Common.Dto.Garmin;
 using Common.Dto.Peloton;
 using Common.Service;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Moq.AutoMock;
 using NUnit.Framework;
@@ -76,5 +77,54 @@ public class SettingServiceTests
 		{
 			chosenDeviceInfo.Should().Be(deviceInfoSettings[WorkoutType.None]);
 		}
+	}
+	private static SettingsService BuildWithConfig(Settings dbSettings, Dictionary<string, string> config)
+	{
+		var mocker = new AutoMocker();
+		mocker.Use<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(config).Build());
+		mocker.GetMock<ISettingsDb>().Setup(x => x.GetSettingsAsync(It.IsAny<int>())).ReturnsAsync(dbSettings);
+		return mocker.CreateInstance<SettingsService>();
+	}
+
+	[Test]
+	public async Task GetSettingsAsync_EnvFormatValue_OverridesSavedSetting_AndLeavesOthersAlone()
+	{
+		var dbSettings = new Settings();
+		dbSettings.Format.IncludeTimeInPowerZones = false;
+		dbSettings.Format.Fit = true;
+		var service = BuildWithConfig(dbSettings, new() { ["Format:IncludeTimeInPowerZones"] = "true" });
+
+		var settings = await service.GetSettingsAsync();
+
+		settings.Format.IncludeTimeInPowerZones.Should().BeTrue();
+		settings.Format.Fit.Should().BeTrue(because: "keys not set in env keep the saved value");
+	}
+
+	[Test]
+	public async Task GetSettingsAsync_EnvNotificationValues_AreApplied()
+	{
+		var service = BuildWithConfig(new Settings(), new()
+		{
+			["Notifications:DiscordWebhookUrl"] = "https://discord.example/webhook",
+			["Notifications:NotifyOnSuccess"] = "true",
+		});
+
+		var settings = await service.GetSettingsAsync();
+
+		settings.Notifications.DiscordWebhookUrl.Should().Be("https://discord.example/webhook");
+		settings.Notifications.NotifyOnSuccess.Should().BeTrue();
+	}
+
+	[Test]
+	public async Task GetSettingsAsync_NoEnvValues_KeepsSavedSettings()
+	{
+		var dbSettings = new Settings();
+		dbSettings.Format.IncludeTimeInPowerZones = true;
+		var service = BuildWithConfig(dbSettings, new());
+
+		var settings = await service.GetSettingsAsync();
+
+		settings.Format.IncludeTimeInPowerZones.Should().BeTrue();
+		settings.Notifications.DiscordWebhookUrl.Should().BeNull();
 	}
 }
