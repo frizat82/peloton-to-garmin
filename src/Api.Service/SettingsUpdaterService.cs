@@ -15,6 +15,8 @@ public interface ISettingsUpdaterService
 }
 public class SettingsUpdaterService : ISettingsUpdaterService
 {
+	private const string InvalidNumWorkoutsToDownloadMessage = "Number of workouts to download must be greater than 0 when Automatic Polling is enabled.";
+
 	private readonly IFileHandling _fileHandler;
 	private readonly ISettingsService _settingsService;
 	private readonly IGarminAuthenticationService _garminAuthService;
@@ -37,7 +39,21 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 			return result;
 		}
 
+		if (updatedAppSettings.EnablePolling && updatedAppSettings.PollingIntervalSeconds <= 0)
+		{
+			result.Successful = false;
+			result.Error = new ServiceError() { Message = "Polling interval must be greater than 0 seconds when Automatic Syncing is enabled." };
+			return result;
+		}
+
 		var settings = await _settingsService.GetSettingsAsync();
+
+		if (updatedAppSettings.EnablePolling && settings.Peloton.NumWorkoutsToDownload <= 0)
+		{
+			result.Successful = false;
+			result.Error = new ServiceError() { Message = InvalidNumWorkoutsToDownloadMessage };
+			return result;
+		}
 		settings.App = updatedAppSettings;
 
 		await _settingsService.UpdateSettingsAsync(settings);
@@ -89,8 +105,9 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 
 		var settings = await _settingsService.GetSettingsAsync();
 
-		if (settings.Garmin.Password != updatedGarminSettings.Password
-			|| settings.Garmin.Email != updatedGarminSettings.Email)
+		// A null password means "unchanged" (the UI never receives the saved password back).
+		var newPassword = updatedGarminSettings.Password ?? settings.Garmin.Password;
+		if (settings.Garmin.Password != newPassword || settings.Garmin.Email != updatedGarminSettings.Email)
 			await _garminAuthService.SignOutAsync();
 
 		settings.Garmin = updatedGarminSettings.Map();
@@ -127,7 +144,7 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 			&& settings.App.EnablePolling)
 		{
 			result.Successful = false;
-			result.Error = new ServiceError() { Message = "Number of workouts to download must but greater than 0 when Automatic Polling is enabled." };
+			result.Error = new ServiceError() { Message = InvalidNumWorkoutsToDownloadMessage };
 			return result;
 		}
 

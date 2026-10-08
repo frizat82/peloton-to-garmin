@@ -60,7 +60,7 @@ public class SettingsUpdaterServiceTests
 
 		response.IsErrored().Should().BeTrue();
 		response.Error.Should().NotBeNull();
-		response.Error.Message.Should().Be("Number of workouts to download must but greater than 0 when Automatic Polling is enabled.");
+		response.Error.Message.Should().Be("Number of workouts to download must be greater than 0 when Automatic Polling is enabled.");
 	}
 
 	[Test]
@@ -149,6 +149,67 @@ public class SettingsUpdaterServiceTests
 		response.IsErrored().Should().BeFalse();
 		response.Error.Should().BeNull();
 		response.Successful.Should().BeTrue();
+	}
+
+	[Test]
+	public async Task GarminPost_With_UnchangedCredentials_Should_Not_SignOut_of_Garmin()
+	{
+		var autoMocker = new AutoMocker();
+		var service = autoMocker.CreateInstance<SettingsUpdaterService>();
+		var settingService = autoMocker.GetMock<ISettingsService>();
+
+		settingService
+			.SetupWithAny<ISettingsService, Task<Settings>>(nameof(settingService.Object.GetSettingsAsync))
+			.ReturnsAsync(new Settings()
+			{
+				Garmin = new() { Email = "ogEmail", Password = "ogPassword" }
+			});
+
+		// The UI never receives the saved password, so it posts null when the password is unchanged.
+		SettingsGarminPostRequest request = new()
+		{
+			Email = "ogEmail",
+			Password = null,
+			Upload = true,
+		};
+
+		var response = await service.UpdateGarminSettingsAsync(request);
+
+		autoMocker
+			.GetMock<IGarminAuthenticationService>()
+			.Verify(x => x.SignOutAsync(), Times.Never);
+		response.Successful.Should().BeTrue();
+	}
+
+	[Test]
+	public async Task UpdateAppSettingsAsync_EnablingPolling_With_Invalid_NumWorkoutsToDownload_ReturnsError()
+	{
+		var autoMocker = new AutoMocker();
+		var service = autoMocker.CreateInstance<SettingsUpdaterService>();
+		var settingService = autoMocker.GetMock<ISettingsService>();
+		settingService
+			.SetupWithAny<ISettingsService, Task<Settings>>(nameof(settingService.Object.GetSettingsAsync))
+			.ReturnsAsync(new Settings() { Peloton = new() { NumWorkoutsToDownload = 0 } });
+
+		var response = await service.UpdateAppSettingsAsync(new App() { EnablePolling = true, PollingIntervalSeconds = 3600 });
+
+		response.IsErrored().Should().BeTrue();
+		response.Error.Message.Should().Be("Number of workouts to download must be greater than 0 when Automatic Polling is enabled.");
+		settingService.Verify(x => x.UpdateSettingsAsync(It.IsAny<Settings>()), Times.Never);
+	}
+
+	[TestCase(0)]
+	[TestCase(-5)]
+	public async Task UpdateAppSettingsAsync_With_NonPositivePollingInterval_And_PollingEnabled_ReturnsError(int interval)
+	{
+		var autoMocker = new AutoMocker();
+		var service = autoMocker.CreateInstance<SettingsUpdaterService>();
+
+		var response = await service.UpdateAppSettingsAsync(new App() { EnablePolling = true, PollingIntervalSeconds = interval });
+
+		response.IsErrored().Should().BeTrue();
+		response.Error.Message.Should().Be("Polling interval must be greater than 0 seconds when Automatic Syncing is enabled.");
+		autoMocker.GetMock<ISettingsService>().Verify(x => x.UpdateSettingsAsync(It.IsAny<Settings>()), Times.Never);
 	}
 
 	[TestCase("valid", ExpectedResult = false)]
