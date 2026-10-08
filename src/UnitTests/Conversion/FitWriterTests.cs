@@ -5,6 +5,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnitTests.UnitTestHelpers;
 
 namespace UnitTests.Conversion;
 
@@ -33,13 +34,7 @@ public class FitWriterTests
 
 		FitWriter.IsSdkProfileCorrupted().Should().BeFalse();
 
-		var decoded = new List<RecordMesg>();
-		var decoder = new Decode();
-		var broadcaster = new MesgBroadcaster();
-		decoder.MesgEvent += broadcaster.OnMesg;
-		decoder.MesgDefinitionEvent += broadcaster.OnMesgDefinition;
-		broadcaster.RecordMesgEvent += (_, e) => decoded.Add((RecordMesg)e.mesg);
-		decoder.Read(new MemoryStream(stream.ToArray()));
+		var decoded = FitTestHelper.DecodeRecords(stream.ToArray());
 
 		decoded.Select(r => r.GetCadence()).Should().Equal(85, 85, 85, null, null, null);
 		decoded.Select(r => r.GetHeartRate()).Should().AllBeEquivalentTo(120);

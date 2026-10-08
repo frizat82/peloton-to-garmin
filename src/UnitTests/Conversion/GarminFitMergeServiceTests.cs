@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnitTests.UnitTestHelpers;
 
 namespace UnitTests.Conversion;
 
@@ -105,19 +106,9 @@ public class GarminFitMergeServiceTests
 
 	private static (int Cadence, int Power) CountBikeRecords(byte[] fitBytes)
 	{
-		int cadence = 0, power = 0;
-		var dec = new Decode();
-		var bc = new MesgBroadcaster();
-		dec.MesgEvent += bc.OnMesg;
-		dec.MesgDefinitionEvent += bc.OnMesgDefinition;
-		bc.RecordMesgEvent += (_, e) =>
-		{
-			var record = (RecordMesg)e.mesg;
-			if (record.GetCadence() is byte c && c != byte.MaxValue) cadence++;
-			if (record.GetPower() is ushort p && p != ushort.MaxValue) power++;
-		};
-		dec.Read(new MemoryStream(fitBytes));
-		return (cadence, power);
+		var records = FitTestHelper.DecodeRecords(fitBytes);
+		return (records.Count(r => r.GetCadence() is byte c && c != byte.MaxValue),
+				records.Count(r => r.GetPower() is ushort p && p != ushort.MaxValue));
 	}
 
 	// ── Tests ─────────────────────────────────────────────────────────────
@@ -138,9 +129,11 @@ public class GarminFitMergeServiceTests
 		var first = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples, firstRecordUnix);
 		var second = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples, firstRecordUnix);
 
-		CountBikeRecords(first).Cadence.Should().BeGreaterThan(0);
-		CountBikeRecords(second).Should().Be(CountBikeRecords(first));
-		CountBikeRecords(second).Cadence.Should().BeLessThan(60, because: "records outside the class must stay without cadence for this test to cover mixed layouts");
+		var firstCounts = CountBikeRecords(first);
+		var secondCounts = CountBikeRecords(second);
+		firstCounts.Cadence.Should().BeGreaterThan(0);
+		secondCounts.Should().Be(firstCounts);
+		secondCounts.Cadence.Should().BeLessThan(60, because: "records outside the class must stay without cadence for this test to cover mixed layouts");
 		FitWriter.IsSdkProfileCorrupted().Should().BeFalse();
 	}
 
