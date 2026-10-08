@@ -17,6 +17,7 @@ using Sync.Database;
 using Sync.Dto;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using UnitTests.UnitTestHelpers;
 
@@ -422,6 +423,73 @@ namespace UnitTests.Sync
 			garmin.Verify(x => x.UploadToGarminAsync(), Times.Never);
 			db.Verify(x => x.UpsertSyncStatusAsync(It.IsAny<SyncServiceStatus>()), Times.Once);
 			fileHandler.Verify(x => x.Cleanup(It.IsAny<string>()), Times.Never);
+		}
+		private static (SyncService service, Mock<IConverter> converter, Mock<ISyncedWorkoutsDb> syncedDb) SetupCyclingSync(P2GWorkout p2gWorkout)
+		{
+			var mocker = new AutoMocker();
+			var service = mocker.CreateInstance<SyncService>();
+			var settings = new Settings();
+			settings.Format.Fit = true;
+			settings.App.CheckForUpdates = false;
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(settings);
+			mocker.GetMock<ISyncStatusDb>().Setup(x => x.GetSyncStatusAsync()).ReturnsAsync(new SyncServiceStatus());
+			mocker.GetMock<IPelotonService>().Setup(x => x.GetWorkoutDetailsAsync(It.IsAny<ICollection<Workout>>())).ReturnsAsync(new[] { p2gWorkout });
+			var converter = mocker.GetMock<IConverter>();
+			converter.Setup(c => c.ConvertAsync(It.IsAny<P2GWorkout>())).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Success });
+			return (service, converter, mocker.GetMock<ISyncedWorkoutsDb>());
+		}
+
+		private static P2GWorkout BuildCyclingP2GWorkout(double?[] outputValues, long endedSecondsAgo)
+		{
+			var end = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - endedSecondsAgo;
+			return new P2GWorkout()
+			{
+				Workout = new Workout() { Id = "ride1", Status = "COMPLETE", Fitness_Discipline = FitnessDiscipline.Cycling, Start_Time = end - 3600, End_Time = end },
+				WorkoutSamples = new WorkoutSamples()
+				{
+					Metrics = new List<Metric>()
+					{
+						new Metric() { Slug = "output", Average_Value = 103, Max_Value = 177, Values = outputValues },
+						new Metric() { Slug = "speed", Average_Value = 25.9, Max_Value = 32.8, Values = new double?[] { 25, 26, 27 } },
+					}
+				}
+			};
+		}
+
+		[Test]
+		public async Task SyncAsync_When_CyclingPerSecondDataMissing_Should_DeferAndNotMarkSynced()
+		{
+			var (service, converter, syncedDb) = SetupCyclingSync(BuildCyclingP2GWorkout(new double?[] { null, null, null }, endedSecondsAgo: 3600));
+
+			var response = await service.SyncAsync(new[] { "ride1" });
+
+			response.SyncSuccess.Should().BeTrue();
+			converter.Verify(x => x.ConvertAsync(It.IsAny<P2GWorkout>()), Times.Never);
+			syncedDb.Verify(x => x.MarkSyncedAsync(It.Is<IEnumerable<string>>(ids => ids.Contains("ride1"))), Times.Never);
+		}
+
+		[Test]
+		public async Task SyncAsync_When_CyclingPerSecondDataPresent_Should_SyncAndMarkSynced()
+		{
+			var (service, converter, syncedDb) = SetupCyclingSync(BuildCyclingP2GWorkout(new double?[] { 100, 105, 110 }, endedSecondsAgo: 3600));
+
+			var response = await service.SyncAsync(new[] { "ride1" });
+
+			response.SyncSuccess.Should().BeTrue();
+			converter.Verify(x => x.ConvertAsync(It.IsAny<P2GWorkout>()), Times.Once);
+			syncedDb.Verify(x => x.MarkSyncedAsync(It.Is<IEnumerable<string>>(ids => ids.Contains("ride1"))), Times.Once);
+		}
+
+		[Test]
+		public async Task SyncAsync_When_CyclingPerSecondDataStillMissingAfter24h_Should_SyncAnyway()
+		{
+			var (service, converter, syncedDb) = SetupCyclingSync(BuildCyclingP2GWorkout(new double?[] { null, null, null }, endedSecondsAgo: 25 * 3600));
+
+			var response = await service.SyncAsync(new[] { "ride1" });
+
+			response.SyncSuccess.Should().BeTrue();
+			converter.Verify(x => x.ConvertAsync(It.IsAny<P2GWorkout>()), Times.Once);
+			syncedDb.Verify(x => x.MarkSyncedAsync(It.Is<IEnumerable<string>>(ids => ids.Contains("ride1"))), Times.Once);
 		}
 	}
 }

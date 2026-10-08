@@ -176,9 +176,12 @@ public static class GarminFitMergeService
 			map[timestamp] = new PelotonSample(speedMps, power, cadence, resistance);
 		}
 
-		_logger.Information("Built Peloton sample map with {Count} entries", map.Count);
+		_logger.Information("Built Peloton sample map with {Count} entries (per-second values: power={Power}, cadence={Cadence}, speed={Speed}, resistance={Resistance})",
+			map.Count, CountValues(outputMetrics), CountValues(cadenceMetrics), CountValues(speedMetrics), CountValues(resistanceMetrics));
 		return map;
 	}
+
+	private static int CountValues(Metric metric) => metric?.Values?.Count(v => v is not null) ?? 0;
 
 	// ─── Merge ───────────────────────────────────────────────────────────────
 
@@ -202,6 +205,8 @@ public static class GarminFitMergeService
 	{
 		int enriched = 0;
 		int speedInjected = 0;
+		int powerInjected = 0;
+		int cadenceInjected = 0;
 
 		// Snapshot which field numbers are declared across ALL RecordMesgs.
 		// We only write to fields the watch already declared — never create new ones.
@@ -268,11 +273,11 @@ public static class GarminFitMergeService
 				// Power: cycling always injects (Peloton is the only source on an indoor bike;
 				// Garmin accepts new field definitions in cycling FITs). Non-cycling: only if declared.
 				if ((isCycling || watchRecordFields.Contains(7)) && record.GetPower() is null or 0 && sample.Power is not null)
-					record.SetPower(sample.Power.Value);
+				{ record.SetPower(sample.Power.Value); powerInjected++; }
 
 				// Cadence: same logic as power
 				if ((isCycling || watchRecordFields.Contains(4)) && record.GetCadence() is null or 0 && sample.Cadence is not null)
-					record.SetCadence(sample.Cadence.Value);
+				{ record.SetCadence(sample.Cadence.Value); cadenceInjected++; }
 
 				// Resistance: same logic as power
 				if ((isCycling || watchRecordFields.Contains(29)) && record.GetResistance() is null or 0 && sample.Resistance is not null)
@@ -299,7 +304,9 @@ public static class GarminFitMergeService
 			result.Add(record);
 		}
 
-		_logger.Information("Enriched {Enriched}/{Total} RecordMesg entries with Peloton data ({Speed} speed, cadence, power)", enriched, messages.Count, speedInjected);
+		_logger.Information("Enriched {Enriched}/{Total} RecordMesg entries with Peloton data ({Speed} speed, {Cadence} cadence, {Power} power)", enriched, messages.Count, speedInjected, cadenceInjected, powerInjected);
+		if (isCycling && enriched > 0 && cadenceInjected == 0 && powerInjected == 0)
+			_logger.Warning("FIT merge: cycling workout matched {Enriched} records but injected no cadence or power — Peloton per-second data may be missing", enriched);
 
 		// Patch Session summary fields. All writes are gated on the watch having declared
 		// the field — we supplement only, never create new field definitions.

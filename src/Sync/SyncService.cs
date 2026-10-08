@@ -114,6 +114,25 @@ namespace Sync
 									return true;
 								}).ToList();
 
+			// Peloton occasionally returns averages without per-second values; syncing then
+			// would permanently lose cadence/power, so leave these unsynced for the next poll.
+			var deferredWorkoutIds = new HashSet<string>();
+			filteredWorkouts = filteredWorkouts.Where(w =>
+								{
+									if (!IsMissingPerSecondData(w)) return true;
+
+									var endedSecondsAgo = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - (w.Workout.End_Time ?? 0);
+									if (endedSecondsAgo > MaxIncompleteDataDeferSeconds)
+									{
+										_logger.Warning("Peloton per-second data for workout {WorkoutId} is still incomplete after {Hours}h — syncing without it.", w.Workout.Id, MaxIncompleteDataDeferSeconds / 3600);
+										return true;
+									}
+
+									_logger.Warning("Peloton per-second data for workout {WorkoutId} is incomplete (power/cadence averages present but no per-second values). Deferring to the next sync.", w.Workout.Id);
+									deferredWorkoutIds.Add(w.Workout.Id);
+									return false;
+								}).ToList();
+
 			var filteredWorkoutsCount = filteredWorkouts.Count;
 			activity?.AddTag("workouts.filtered", filteredWorkoutsCount);
 			_logger.Information("Found {@NumWorkouts} workouts remaining after filtering ExcludedWorkoutTypes.", filteredWorkoutsCount);
@@ -268,10 +287,23 @@ namespace Sync
 				_fileHandler.Cleanup(settings.App.WorkingDirectory);
 			}
 
+			var syncedWorkoutIds = workoutIds.Where(id => !deferredWorkoutIds.Contains(id)).ToList();
 			response.SyncSuccess = true;
-			_logger.Information("Sync complete: {Count} workout(s) uploaded to Garmin.", workoutIds.Count());
-			await _syncedWorkoutsDb.MarkSyncedAsync(workoutIds);
+			_logger.Information("Sync complete: {Count} workout(s) uploaded to Garmin.", syncedWorkoutIds.Count);
+			await _syncedWorkoutsDb.MarkSyncedAsync(syncedWorkoutIds);
 			return response;
+		}
+
+		private const long MaxIncompleteDataDeferSeconds = 24 * 60 * 60;
+
+		private static bool IsMissingPerSecondData(P2GWorkout workout)
+		{
+			if (workout.Workout?.Fitness_Discipline != FitnessDiscipline.Cycling)
+				return false;
+
+			return workout.WorkoutSamples?.Metrics?
+				.Where(m => m.Slug is "output" or "cadence")
+				.Any(m => m.Average_Value > 0 && (m.Values is null || !m.Values.Any(v => v > 0))) ?? false;
 		}
 
 		public async Task<ICollection<GarminEnrichmentResult>> PreviewMergeAsync(IEnumerable<string> workoutIds)
