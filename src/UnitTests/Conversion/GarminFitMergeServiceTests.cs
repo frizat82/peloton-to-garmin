@@ -141,6 +141,7 @@ public class GarminFitMergeServiceTests
 		CountBikeRecords(first).Cadence.Should().BeGreaterThan(0);
 		CountBikeRecords(second).Should().Be(CountBikeRecords(first));
 		CountBikeRecords(second).Cadence.Should().BeLessThan(60, because: "records outside the class must stay without cadence for this test to cover mixed layouts");
+		FitWriter.IsSdkProfileCorrupted().Should().BeFalse();
 	}
 
 	[Test]

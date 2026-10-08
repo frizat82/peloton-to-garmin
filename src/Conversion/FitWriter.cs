@@ -12,10 +12,21 @@ namespace Conversion;
 /// fewer fields than that definition (e.g. records without cadence after records with it), the SDK fills the
 /// missing fields from its static <see cref="Profile"/> and leaves invalid values stored there. Every FIT file
 /// read or merged later in the same process then sees those values, which made merges silently skip
-/// cadence, power and resistance. Writing an exact definition whenever the fields change avoids that path.
+/// cadence, power and resistance. Writing a new definition whenever the set of fields changes avoids that path.
 /// </remarks>
 public static class FitWriter
 {
+	/// <summary>
+	/// True when the SDK's shared record definition holds values, i.e. something wrote FIT data without
+	/// <see cref="Write"/> and later merges in this process will lose cadence, power and resistance.
+	/// </summary>
+	public static bool IsSdkProfileCorrupted()
+	{
+		var record = Profile.GetMesg(MesgNum.Record);
+		return record.GetField(RecordMesg.FieldDefNum.Cadence).GetNumValues() > 0
+			|| record.GetField(RecordMesg.FieldDefNum.Power).GetNumValues() > 0;
+	}
+
 	public static void Write(Stream stream, IEnumerable<Mesg> messages)
 	{
 		var encoder = new Encode(ProtocolVersion.V20);
@@ -26,7 +37,11 @@ public static class FitWriter
 			foreach (var mesg in messages)
 			{
 				var definition = new MesgDefinition(mesg);
-				if (!written.TryGetValue(mesg.LocalNum, out var current) || !current.Supports(definition) || !definition.Supports(current))
+				// Supports() means the written definition covers this message; equal field counts mean it has no extras.
+				if (!written.TryGetValue(mesg.LocalNum, out var current)
+					|| !current.Supports(definition)
+					|| current.NumFields != definition.NumFields
+					|| current.NumDevFields != definition.NumDevFields)
 				{
 					encoder.Write(definition);
 					written[mesg.LocalNum] = definition;
