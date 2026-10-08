@@ -114,10 +114,9 @@ public class GarminMergeVerificationService : IGarminMergeVerificationService
 			return;
 		}
 
-		var expected = GarminFitMergeService.CountCadenceAndPowerRecords(await File.ReadAllBytesAsync(pending.MergedFitPath));
 		var stored = GarminFitMergeService.CountCadenceAndPowerRecords(storedFit);
-		var dropped = (expected.CadenceRecords > 0 && stored.CadenceRecords == 0)
-			|| (expected.PowerRecords > 0 && stored.PowerRecords == 0);
+		var dropped = (pending.ExpectedCadenceRecords > 0 && stored.CadenceRecords == 0)
+			|| (pending.ExpectedPowerRecords > 0 && stored.PowerRecords == 0);
 
 		if (!dropped)
 		{
@@ -134,13 +133,18 @@ public class GarminMergeVerificationService : IGarminMergeVerificationService
 		}
 
 		_logger.Warning("Merge check: Garmin dropped cadence and power from activity {ActivityId} (stored {Cadence}/{Power} records, expected {ExpectedCadence}/{ExpectedPower}). Deleting it to upload the merged FIT again.",
-			activityId, stored.CadenceRecords, stored.PowerRecords, expected.CadenceRecords, expected.PowerRecords);
-		await _apiClient.DeleteActivityAsync(activityId, auth);
+			activityId, stored.CadenceRecords, stored.PowerRecords, pending.ExpectedCadenceRecords, pending.ExpectedPowerRecords);
 
+		// Save the new state before deleting, so a delete that succeeds on Garmin but errors here
+		// still leads to a re-upload instead of the check giving up on a missing activity.
+		var nearby = await SearchNearWorkoutAsync(pending, auth);
+		pending.PreExistingActivityIds = nearby.Select(a => a.ActivityId).Append(activityId).Distinct().ToList();
 		pending.GarminActivityId = null;
 		pending.DeletedGarminActivityId = activityId;
 		pending.CheckAfterUtc = DateTime.UtcNow + ReuploadDelay;
 		await _mergeDb.UpsertPendingVerificationAsync(pending);
+
+		await _apiClient.DeleteActivityAsync(activityId, auth);
 	}
 
 	private async Task ReuploadAsync(PendingMergeVerification pending, GarminApiAuthentication auth)
@@ -149,52 +153,99 @@ public class GarminMergeVerificationService : IGarminMergeVerificationService
 		var nearby = await SearchNearWorkoutAsync(pending, auth);
 		if (nearby.Any(a => a.ActivityId == deletedId))
 		{
-			_logger.Information("Merge check: Garmin still lists deleted activity {ActivityId}, waiting before re-uploading", deletedId);
+			_logger.Information("Merge check: Garmin still lists deleted activity {ActivityId}, deleting again and waiting before re-uploading", deletedId);
 			pending.CheckAfterUtc = DateTime.UtcNow + ReuploadDelay;
 			await _mergeDb.UpsertPendingVerificationAsync(pending);
+			try
+			{
+				await _apiClient.DeleteActivityAsync(deletedId, auth);
+			}
+			catch (Exception e)
+			{
+				_logger.Warning(e, "Merge check: repeat delete of {ActivityId} failed, will check again on the next run", deletedId);
+			}
 			return;
 		}
 
-		pending.PreExistingActivityIds = nearby.Select(a => a.ActivityId).Append(deletedId).ToList();
-		await _apiClient.UploadActivity(pending.MergedFitPath, ".fit", auth);
+		// An earlier attempt may have reached Garmin even though it errored here; don't upload a second copy.
+		var alreadyUploaded = FindMergedUpload(pending, nearby);
+		if (alreadyUploaded is not null)
+		{
+			_logger.Information("Merge check: found activity {ActivityId} from an earlier re-upload", alreadyUploaded);
+			pending.DeletedGarminActivityId = null;
+			await AdoptUploadedActivityAsync(pending, alreadyUploaded.Value, auth);
+			return;
+		}
 
+		if (pending.Reuploads >= MaxReuploads)
+		{
+			_logger.Error("Merge check: could not re-upload the merged FIT for original activity {OriginalId} after {Count} attempts. Upload it manually from {Path}", pending.OriginalGarminActivityId, pending.Reuploads, pending.MergedFitPath);
+			await _mergeDb.RemovePendingVerificationAsync(pending.OriginalGarminActivityId);
+			return;
+		}
+
+		// Count the attempt before uploading so repeated upload failures still reach the limit.
 		pending.Reuploads++;
+		await _mergeDb.UpsertPendingVerificationAsync(pending);
+
+		var response = await _apiClient.UploadActivity(pending.MergedFitPath, ".fit", auth);
+		_logger.Information("Merge check: re-uploaded merged FIT for original activity {OriginalId} (re-upload {Count}/{Max})", pending.OriginalGarminActivityId, pending.Reuploads, MaxReuploads);
+
 		pending.DeletedGarminActivityId = null;
 		pending.UploadedAtUtc = DateTime.UtcNow;
 		// Garmin decides whether to keep the data while it processes the upload, so a short wait is enough.
 		pending.CheckAfterUtc = pending.UploadedAtUtc + ReuploadDelay;
-		await _mergeDb.UpsertPendingVerificationAsync(pending);
-		_logger.Information("Merge check: re-uploaded merged FIT for original activity {OriginalId} (re-upload {Count}/{Max})", pending.OriginalGarminActivityId, pending.Reuploads, MaxReuploads);
+
+		var newActivityId = response?.DetailedImportResult?.Successes?.FirstOrDefault()?.InternalId;
+		if (newActivityId is null && response?.DetailedImportResult?.UploadId is long uploadId)
+			newActivityId = await _apiClient.PollUploadActivityIdAsync(uploadId, auth);
+
+		if (newActivityId is null)
+			await _mergeDb.UpsertPendingVerificationAsync(pending);
+		else
+			await AdoptUploadedActivityAsync(pending, newActivityId.Value, auth);
 	}
 
 	private async Task<bool> TryResolveUploadedActivityAsync(PendingMergeVerification pending, GarminApiAuthentication auth)
 	{
-		var nearby = await SearchNearWorkoutAsync(pending, auth);
-		var activityId = nearby
-			.Where(a => !pending.PreExistingActivityIds.Contains(a.ActivityId))
-			.Select(a => (long?)a.ActivityId)
-			.FirstOrDefault();
-
-		if (activityId is null)
+		var activityId = FindMergedUpload(pending, await SearchNearWorkoutAsync(pending, auth));
+		if (activityId is not null)
 		{
-			if (DateTime.UtcNow - pending.UploadedAtUtc > GiveUpFindingActivityAfter)
-			{
-				_logger.Warning("Merge check: could not find the uploaded activity for original {OriginalId}, giving up on the check", pending.OriginalGarminActivityId);
-				await CompleteAsync(pending);
-			}
-			return false;
+			await AdoptUploadedActivityAsync(pending, activityId.Value, auth);
+			return true;
 		}
 
-		await _apiClient.UpdateActivityAsync(activityId.Value, new GarminActivityUpdateRequest
+		if (DateTime.UtcNow - pending.UploadedAtUtc > GiveUpFindingActivityAfter)
 		{
-			ActivityId = activityId.Value,
+			_logger.Warning("Merge check: could not find the uploaded activity for original {OriginalId}, giving up on the check; the merged FIT is kept at {Path}", pending.OriginalGarminActivityId, pending.MergedFitPath);
+			await _mergeDb.RemovePendingVerificationAsync(pending.OriginalGarminActivityId);
+		}
+		return false;
+	}
+
+	// The merged FIT keeps the watch's start time, so only a new activity starting at that same moment is ours.
+	// Anything else nearby (a stretch, a second class) is never touched.
+	private static long? FindMergedUpload(PendingMergeVerification pending, IEnumerable<GarminActivitySummary> nearby)
+	{
+		return nearby
+			.Where(a => !pending.PreExistingActivityIds.Contains(a.ActivityId)
+				&& GarminActivityEnrichmentService.TryParseGarminStartTime(a.StartTimeGMT, out var start)
+				&& Math.Abs((start - pending.ActivityStartUtc).TotalSeconds) <= 2)
+			.Select(a => (long?)a.ActivityId)
+			.FirstOrDefault();
+	}
+
+	private async Task AdoptUploadedActivityAsync(PendingMergeVerification pending, long activityId, GarminApiAuthentication auth)
+	{
+		await _apiClient.UpdateActivityAsync(activityId, new GarminActivityUpdateRequest
+		{
+			ActivityId = activityId,
 			ActivityName = pending.ActivityName,
 			Description = pending.Description,
 		}, auth);
 
 		pending.GarminActivityId = activityId;
 		await _mergeDb.UpsertPendingVerificationAsync(pending);
-		return true;
 	}
 
 	private async Task<ICollection<GarminActivitySummary>> SearchNearWorkoutAsync(PendingMergeVerification pending, GarminApiAuthentication auth)

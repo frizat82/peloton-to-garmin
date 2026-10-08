@@ -1,4 +1,4 @@
-using Common.Dto;
+﻿using Common.Dto;
 using Common.Dto.Peloton;
 using Common.Helpers;
 using Common.Observe;
@@ -386,6 +386,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				OriginalGarminActivityId = garminActivityId,
 				PelotonWorkoutId = primary.P2GWorkout.Workout.Id,
 				WorkoutStartUtc = workoutStart,
+				ActivityStartUtc = primary.Result.GarminActivityStartTimeUtc ?? default,
 				ActivityName = activityName,
 				Description = description,
 				GarminActivityId = newActivityId,
@@ -429,8 +430,8 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 	{
 		try
 		{
-			var (cadenceRecords, powerRecords) = GarminFitMergeService.CountCadenceAndPowerRecords(mergedFitBytes);
-			if (cadenceRecords == 0 && powerRecords == 0)
+			(pending.ExpectedCadenceRecords, pending.ExpectedPowerRecords) = GarminFitMergeService.CountCadenceAndPowerRecords(mergedFitBytes);
+			if (pending.ExpectedCadenceRecords == 0 && pending.ExpectedPowerRecords == 0)
 				return;
 
 			var dir = GarminMergeVerificationService.GetPendingFitDirectory();

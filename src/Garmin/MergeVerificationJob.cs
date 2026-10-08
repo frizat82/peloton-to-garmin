@@ -1,9 +1,11 @@
 using Common.Observe;
-using Garmin;
 using Microsoft.Extensions.Hosting;
-using ILogger = Serilog.ILogger;
+using Serilog;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace Api.Service;
+namespace Garmin;
 
 /// <summary>
 /// Periodically checks merged FIT uploads and re-uploads any that Garmin stored without cadence and power.

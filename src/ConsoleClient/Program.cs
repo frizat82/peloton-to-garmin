@@ -94,6 +94,7 @@ static IHostBuilder CreateHostBuilder(string[] args)
 			services.AddSingleton<IGarminUploader, GarminUploader>();
 			services.AddSingleton<IGarminApiClient, Garmin.ApiClient>();
 			services.AddSingleton<IGarminActivityEnrichmentService, GarminActivityEnrichmentService>();
+			services.AddSingleton<IGarminMergeVerificationService, GarminMergeVerificationService>();
 			services.AddSingleton<IGarminDb, GarminDb>();
 			services.AddSingleton<IGarminMergeDb, GarminMergeDb>();
 
@@ -114,5 +115,6 @@ static IHostBuilder CreateHostBuilder(string[] args)
 			ConfigurationSetup.LoadConfigValues(hostContext.Configuration, config);
 
 			services.AddHostedService<Startup>();
+			services.AddHostedService<MergeVerificationJob>();
 		});
 }

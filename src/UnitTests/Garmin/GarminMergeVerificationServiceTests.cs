@@ -70,6 +70,9 @@ namespace UnitTests.Garmin
 			{
 				OriginalGarminActivityId = 42,
 				WorkoutStartUtc = WorkoutStart,
+				ActivityStartUtc = WorkoutStart.AddMinutes(1),
+				ExpectedCadenceRecords = 10,
+				ExpectedPowerRecords = 10,
 				ActivityName = "60 min Power Zone Ride",
 				Description = "desc",
 				MergedFitPath = _mergedFitPath,
@@ -80,10 +83,10 @@ namespace UnitTests.Garmin
 			};
 		}
 
-		private static GarminActivitySummary Activity(long id) => new GarminActivitySummary
+		private static GarminActivitySummary Activity(long id, int startMinutesAfterWorkout = 1) => new GarminActivitySummary
 		{
 			ActivityId = id,
-			StartTimeGMT = WorkoutStart.AddMinutes(1).ToString("yyyy-MM-dd HH:mm:ss"),
+			StartTimeGMT = WorkoutStart.AddMinutes(startMinutesAfterWorkout).ToString("yyyy-MM-dd HH:mm:ss"),
 		};
 
 		private static AutoMocker BuildMocker(PendingMergeVerification pending)
@@ -135,6 +138,9 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>()
 				.Setup(c => c.DownloadActivityFitAsync(100, It.IsAny<GarminApiAuthentication>()))
 				.ReturnsAsync(BuildFit(withCadenceAndPower: false));
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { Activity(7), Activity(100) });
 
 			await mocker.CreateInstance<GarminMergeVerificationService>().VerifyPendingAsync();
 
@@ -142,6 +148,7 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>().Verify(c => c.UploadActivity(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
 			pending.GarminActivityId.Should().BeNull();
 			pending.DeletedGarminActivityId.Should().Be(100);
+			pending.PreExistingActivityIds.Should().BeEquivalentTo(new[] { 7L, 100L });
 			pending.CheckAfterUtc.Should().BeAfter(DateTime.UtcNow);
 			mocker.GetMock<IGarminMergeDb>().Verify(db => db.UpsertPendingVerificationAsync(pending), Times.Once);
 			File.Exists(_mergedFitPath).Should().BeTrue();
@@ -213,7 +220,82 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>().Verify(c => c.UploadActivity(_mergedFitPath, ".fit", It.IsAny<GarminApiAuthentication>()), Times.Once);
 			pending.Reuploads.Should().Be(1);
 			pending.DeletedGarminActivityId.Should().BeNull();
-			pending.PreExistingActivityIds.Should().BeEquivalentTo(new[] { 7L, 100L });
+			pending.GarminActivityId.Should().BeNull();
+		}
+
+		[Test]
+		public async Task VerifyPending_When_ReuploadReturnsActivityId_RenamesThatActivity()
+		{
+			var pending = BuildPending(garminActivityId: null);
+			pending.DeletedGarminActivityId = 100;
+			var mocker = BuildMocker(pending);
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { Activity(7) });
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.UploadActivity(_mergedFitPath, ".fit", It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new UploadResponse { DetailedImportResult = new DetailedImportResult { Successes = new List<Success> { new Success { InternalId = 500 } } } });
+
+			await mocker.CreateInstance<GarminMergeVerificationService>().VerifyPendingAsync();
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(500, It.Is<GarminActivityUpdateRequest>(r => r.ActivityName == "60 min Power Zone Ride"), It.IsAny<GarminApiAuthentication>()), Times.Once);
+			pending.GarminActivityId.Should().Be(500);
+			pending.CheckAfterUtc.Should().BeAfter(DateTime.UtcNow);
+		}
+
+		[Test]
+		public async Task VerifyPending_When_EarlierReuploadAlreadyLanded_AdoptsItInsteadOfUploadingAgain()
+		{
+			var pending = BuildPending(garminActivityId: null);
+			pending.DeletedGarminActivityId = 100;
+			pending.Reuploads = 1;
+			var mocker = BuildMocker(pending);
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { Activity(7), Activity(600) });
+
+			await mocker.CreateInstance<GarminMergeVerificationService>().VerifyPendingAsync();
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UploadActivity(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			pending.GarminActivityId.Should().Be(600);
+			pending.DeletedGarminActivityId.Should().BeNull();
+		}
+
+		[Test]
+		public async Task VerifyPending_When_ReuploadAttemptsExhausted_GivesUpAndKeepsMergedFit()
+		{
+			var pending = BuildPending(garminActivityId: null);
+			pending.DeletedGarminActivityId = 100;
+			pending.Reuploads = GarminMergeVerificationService.MaxReuploads;
+			var mocker = BuildMocker(pending);
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { Activity(7) });
+
+			await mocker.CreateInstance<GarminMergeVerificationService>().VerifyPendingAsync();
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UploadActivity(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			mocker.GetMock<IGarminMergeDb>().Verify(db => db.RemovePendingVerificationAsync(42), Times.Once);
+			File.Exists(_mergedFitPath).Should().BeTrue();
+		}
+
+		[Test]
+		public async Task VerifyPending_When_ReuploadFails_CountsTheAttempt()
+		{
+			var pending = BuildPending(garminActivityId: null);
+			pending.DeletedGarminActivityId = 100;
+			var mocker = BuildMocker(pending);
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { Activity(7) });
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.UploadActivity(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<GarminApiAuthentication>()))
+				.ThrowsAsync(new System.Exception("409 duplicate"));
+
+			await mocker.CreateInstance<GarminMergeVerificationService>().VerifyPendingAsync();
+
+			pending.Reuploads.Should().Be(1);
+			pending.DeletedGarminActivityId.Should().Be(100);
 			mocker.GetMock<IGarminMergeDb>().Verify(db => db.UpsertPendingVerificationAsync(pending), Times.Once);
 		}
 
@@ -225,7 +307,7 @@ namespace UnitTests.Garmin
 			var otherDayActivity = new GarminActivitySummary { ActivityId = 300, StartTimeGMT = WorkoutStart.AddHours(5).ToString("yyyy-MM-dd HH:mm:ss") };
 			mocker.GetMock<IGarminApiClient>()
 				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
-				.ReturnsAsync(new List<GarminActivitySummary> { otherDayActivity, Activity(7), Activity(200) });
+				.ReturnsAsync(new List<GarminActivitySummary> { otherDayActivity, Activity(250, startMinutesAfterWorkout: 8), Activity(7), Activity(200) });
 			mocker.GetMock<IGarminApiClient>()
 				.Setup(c => c.DownloadActivityFitAsync(200, It.IsAny<GarminApiAuthentication>()))
 				.ReturnsAsync(BuildFit(withCadenceAndPower: true));
@@ -235,7 +317,24 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(200,
 				It.Is<GarminActivityUpdateRequest>(r => r.ActivityName == "60 min Power Zone Ride" && r.Description == "desc"),
 				It.IsAny<GarminApiAuthentication>()), Times.Once);
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(250, It.IsAny<GarminActivityUpdateRequest>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
 			mocker.GetMock<IGarminMergeDb>().Verify(db => db.RemovePendingVerificationAsync(42), Times.Once);
+		}
+
+		[Test]
+		public async Task VerifyPending_When_OnlyUnrelatedNewActivityNearby_LeavesItAlone()
+		{
+			var pending = BuildPending(garminActivityId: null);
+			var mocker = BuildMocker(pending);
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { Activity(7), Activity(250, startMinutesAfterWorkout: 8) });
+
+			await mocker.CreateInstance<GarminMergeVerificationService>().VerifyPendingAsync();
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(It.IsAny<long>(), It.IsAny<GarminActivityUpdateRequest>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.DownloadActivityFitAsync(It.IsAny<long>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.DeleteActivityAsync(It.IsAny<long>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
 		}
 
 		[Test]
