@@ -15,7 +15,7 @@ USER p2g:p2g
 
 WORKDIR /app
 
-RUN mkdir -m770 {output,data,working}
+RUN mkdir -m770 output data working
 
 ###################
 # BUILD LAYER
