@@ -161,7 +161,6 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 		}
 
 		var settings = await _settingsService.GetSettingsAsync();
-		settings.Notifications ??= new NotificationSettings();
 		if (updatedNotificationSettings.RemoveDiscordWebhookUrl)
 			settings.Notifications.DiscordWebhookUrl = null;
 		else if (!string.IsNullOrEmpty(webhookUrl))

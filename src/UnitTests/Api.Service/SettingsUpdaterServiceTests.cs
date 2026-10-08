@@ -245,7 +245,6 @@ public class SettingsUpdaterServiceTests
 		settings.Notifications.DiscordWebhookUrl.Should().Be("https://discord.com/api/webhooks/saved");
 	}
 
-	[Test]
 	[TestCase("https://canary.discordapp.com/api/webhooks/1/abc")]
 	[TestCase("https://ptb.discord.com/api/webhooks/1/abc")]
 	public async Task UpdateNotificationSettingsAsync_With_DiscordSubdomainWebhook_SavesIt(string url)

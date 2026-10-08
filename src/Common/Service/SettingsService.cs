@@ -28,7 +28,7 @@ public class SettingsService : ISettingsService
 	private readonly IReadOnlyList<EnvironmentOverride> _environmentOverrides;
 
 	/// <summary>A P2G_FORMAT__* or P2G_NOTIFICATIONS__* environment variable that overrides one saved setting.</summary>
-	private record EnvironmentOverride(string Section, PropertyInfo Property, object Value);
+	private record EnvironmentOverride(string Section, Func<Settings, object> SectionOf, PropertyInfo Property, object Value);
 
 	public SettingsService(ISettingsDb db, IMemoryCache cache, IConfiguration configurationLoader, IFileHandling fileHandler)
 	{
@@ -56,7 +56,7 @@ public class SettingsService : ISettingsService
 
 		settings.Notifications ??= new NotificationSettings();
 		foreach (var o in _environmentOverrides)
-			o.Property.SetValue(SectionOf(settings, o.Section), o.Value);
+			o.Property.SetValue(o.SectionOf(settings), o.Value);
 
 		return settings;
 	}
@@ -78,7 +78,7 @@ public class SettingsService : ISettingsService
 		originalSettings.Notifications ??= new NotificationSettings();
 		updatedSettings.Notifications ??= new NotificationSettings();
 		foreach (var o in _environmentOverrides)
-			o.Property.SetValue(SectionOf(updatedSettings, o.Section), o.Property.GetValue(SectionOf(originalSettings, o.Section)));
+			o.Property.SetValue(o.SectionOf(updatedSettings), o.Property.GetValue(o.SectionOf(originalSettings)));
 
 		ClearPelotonApiAuthentication(originalSettings.Peloton.Email);
 		ClearPelotonApiAuthentication(updatedSettings.Peloton.Email);
@@ -97,8 +97,6 @@ public class SettingsService : ISettingsService
 		return type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal);
 	}
 
-	private static object SectionOf(Settings settings, string section) => section == nameof(Settings.Format) ? settings.Format : settings.Notifications;
-
 	/// <summary>
 	/// Reads the P2G_FORMAT__* and P2G_NOTIFICATIONS__* environment variables once. Only environment variables count
 	/// (not configuration files), and only top-level values such as P2G_FORMAT__INCLUDETIMEINPOWERZONES; nested keys
@@ -114,7 +112,12 @@ public class SettingsService : ISettingsService
 
 		var environment = new ConfigurationRoot(envProviders);
 		var overrides = new List<EnvironmentOverride>();
-		foreach (var (section, type) in new[] { (nameof(Settings.Format), typeof(Format)), (nameof(Settings.Notifications), typeof(NotificationSettings)) })
+		var sections = new (string Name, Type Type, Func<Settings, object> SectionOf)[]
+		{
+			(nameof(Settings.Format), typeof(Format), s => s.Format),
+			(nameof(Settings.Notifications), typeof(NotificationSettings), s => s.Notifications),
+		};
+		foreach (var (section, type, sectionOf) in sections)
 		{
 			foreach (var child in environment.GetSection(section).GetChildren())
 			{
@@ -127,7 +130,7 @@ public class SettingsService : ISettingsService
 
 				try
 				{
-					overrides.Add(new EnvironmentOverride(section, property, child.Get(property.PropertyType)));
+					overrides.Add(new EnvironmentOverride(section, sectionOf, property, child.Get(property.PropertyType)));
 				}
 				catch (Exception e)
 				{

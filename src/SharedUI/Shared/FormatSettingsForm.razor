@@ -8,7 +8,7 @@
 @if (otherEnvironmentOverrides.Any())
 {
 	<HxAlert Color="ThemeColor.Info">
-		These settings are set by <code>P2G_FORMAT__*</code> environment variables, so changes to them here won't be saved: @string.Join(", ", otherEnvironmentOverrides)
+		These settings are set by <code>@(Constants.EnvironmentVariablePrefix)_FORMAT__*</code> environment variables, so changes to them here won't be saved: @string.Join(", ", otherEnvironmentOverrides)
 	</HxAlert>
 }
 
@@ -218,7 +218,7 @@
 								<HxSwitch Text="Include Time In HR Zones" @bind-Value="formatSettings.IncludeTimeInHRZones" />
 								<HxFormState Enabled="@(!powerZonesFromEnvironment)">
 									<HxSwitch Text="Include Time in Power Zones" @bind-Value="formatSettings.IncludeTimeInPowerZones"
-											  Hint="@(powerZonesFromEnvironment ? "Set by the P2G_FORMAT__INCLUDETIMEINPOWERZONES environment variable, so it can't be changed here." : null)" />
+											  Hint="@(powerZonesFromEnvironment ? SettingsGetResponse.EnvironmentHint(nameof(Settings.Format), nameof(Format.IncludeTimeInPowerZones)) : null)" />
 								</HxFormState>
 							</BodyTemplate>
 						</HxCard>
@@ -280,9 +280,8 @@
 		var settings = await _apiClient.SettingsGetAsync();
 		formatSettings = settings.Format;
 		powerZonesFromEnvironment = settings.IsSetByEnvironment(nameof(Settings.Format), nameof(Format.IncludeTimeInPowerZones));
-		otherEnvironmentOverrides = settings.EnvironmentOverrides
-			.Where(o => o.StartsWith($"{nameof(Settings.Format)}.") && o != $"{nameof(Settings.Format)}.{nameof(Format.IncludeTimeInPowerZones)}")
-			.Select(o => o[(nameof(Settings.Format).Length + 1)..])
+		otherEnvironmentOverrides = settings.EnvironmentOverridesIn(nameof(Settings.Format))
+			.Where(p => p != nameof(Format.IncludeTimeInPowerZones))
 			.ToList();
 		TitleTemplate_ValueChanged(formatSettings!.WorkoutTitleTemplate);
 
