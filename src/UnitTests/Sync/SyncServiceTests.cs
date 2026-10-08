@@ -17,6 +17,7 @@ using Sync.Database;
 using Sync.Dto;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using UnitTests.UnitTestHelpers;
 
@@ -422,6 +423,96 @@ namespace UnitTests.Sync
 			garmin.Verify(x => x.UploadToGarminAsync(), Times.Never);
 			db.Verify(x => x.UpsertSyncStatusAsync(It.IsAny<SyncServiceStatus>()), Times.Once);
 			fileHandler.Verify(x => x.Cleanup(It.IsAny<string>()), Times.Never);
+		}
+
+		[TestCase("bad", new[] { "good", "bad" }, TestName = "SyncAsync_When_WorkoutFailsToConvert_Should_OnlyMarkConvertedWorkoutsSynced")]
+		[TestCase("a,b", new[] { "good", "a", "b" }, TestName = "SyncAsync_When_StackedWorkoutFailsToConvert_Should_NotMarkAnyStackMemberSynced")]
+		public async Task SyncAsync_When_WorkoutFailsToConvert_Should_NotMarkItSynced(string failingId, string[] requestedIds)
+		{
+			// SETUP
+			var mocker = new AutoMocker();
+
+			var service = mocker.CreateInstance<SyncService>();
+			var peloton = mocker.GetMock<IPelotonService>();
+			var converter = mocker.GetMock<IConverter>();
+			var syncedDb = mocker.GetMock<ISyncedWorkoutsDb>();
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(new Settings());
+
+			var good = new P2GWorkout() { Workout = new Workout() { Id = "good" } };
+			var bad = new P2GWorkout() { Workout = new Workout() { Id = failingId } };
+			peloton.Setup(x => x.GetWorkoutDetailsAsync(It.IsAny<ICollection<Workout>>())).ReturnsAsync(new[] { good, bad });
+
+			converter.Setup(c => c.ConvertAsync(good)).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Success });
+			converter.Setup(c => c.ConvertAsync(bad)).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Failed, ErrorMessage = "boom" });
+
+			// ACT
+			var response = await service.SyncAsync(requestedIds);
+
+			// ASSERT
+			response.SyncSuccess.Should().BeTrue();
+			response.Errors.Should().ContainSingle(e => e.Message == "boom");
+			syncedDb.Verify(x => x.MarkSyncedAsync(It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { "good" }))), Times.Once);
+		}
+
+		[Test]
+		public async Task SyncAsync_When_UploadFormatConverterFails_Should_NotMarkSynced_Or_Enrich_EvenIfOtherFormatsSucceed()
+		{
+			// SETUP
+			var mocker = new AutoMocker();
+
+			var uploadConverter = new Mock<IConverter>();
+			var otherConverter = new Mock<IConverter>();
+			mocker.Use<IEnumerable<IConverter>>(new[] { uploadConverter.Object, otherConverter.Object });
+
+			var service = mocker.CreateInstance<SyncService>();
+			var peloton = mocker.GetMock<IPelotonService>();
+			var syncedDb = mocker.GetMock<ISyncedWorkoutsDb>();
+			var enrichment = mocker.GetMock<IGarminActivityEnrichmentService>();
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(new Settings());
+
+			var good = new P2GWorkout() { Workout = new Workout() { Id = "good" } };
+			var bad = new P2GWorkout() { Workout = new Workout() { Id = "bad" } };
+			peloton.Setup(x => x.GetWorkoutDetailsAsync(It.IsAny<ICollection<Workout>>())).ReturnsAsync(new[] { good, bad });
+
+			uploadConverter.Setup(c => c.ConvertAsync(good)).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Success, IsUploadFormat = true });
+			uploadConverter.Setup(c => c.ConvertAsync(bad)).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Failed, IsUploadFormat = true, ErrorMessage = "boom" });
+			otherConverter.Setup(c => c.ConvertAsync(It.IsAny<P2GWorkout>())).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Success });
+
+			enrichment.Setup(e => e.EnrichAsync(It.IsAny<IEnumerable<P2GWorkout>>())).ReturnsAsync(new List<GarminEnrichmentResult>());
+
+			// ACT
+			await service.SyncAsync(new[] { "good", "bad" });
+
+			// ASSERT
+			syncedDb.Verify(x => x.MarkSyncedAsync(It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { "good" }))), Times.Once);
+			enrichment.Verify(e => e.EnrichAsync(It.Is<IEnumerable<P2GWorkout>>(w => w.SequenceEqual(new[] { good }))), Times.Once);
+		}
+
+		[Test]
+		public async Task SyncAsync_When_NonUploadFormatFails_But_UploadFormatSucceeds_Should_MarkSynced()
+		{
+			// SETUP
+			var mocker = new AutoMocker();
+
+			var uploadConverter = new Mock<IConverter>();
+			var otherConverter = new Mock<IConverter>();
+			mocker.Use<IEnumerable<IConverter>>(new[] { uploadConverter.Object, otherConverter.Object });
+
+			var service = mocker.CreateInstance<SyncService>();
+			var syncedDb = mocker.GetMock<ISyncedWorkoutsDb>();
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(new Settings());
+
+			var workout = new P2GWorkout() { Workout = new Workout() { Id = "1" } };
+			mocker.GetMock<IPelotonService>().Setup(x => x.GetWorkoutDetailsAsync(It.IsAny<ICollection<Workout>>())).ReturnsAsync(new[] { workout });
+
+			uploadConverter.Setup(c => c.ConvertAsync(workout)).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Success, IsUploadFormat = true });
+			otherConverter.Setup(c => c.ConvertAsync(workout)).ReturnsAsync(new ConvertStatus() { Result = ConversionResult.Failed, ErrorMessage = "json failed" });
+
+			// ACT
+			await service.SyncAsync(new[] { "1" });
+
+			// ASSERT
+			syncedDb.Verify(x => x.MarkSyncedAsync(It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { "1" }))), Times.Once);
 		}
 	}
 }

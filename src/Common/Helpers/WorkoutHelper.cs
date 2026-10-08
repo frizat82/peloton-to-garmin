@@ -29,7 +29,7 @@ public static class WorkoutHelper
 		if (string.IsNullOrWhiteSpace(template))
 			template = new Format().WorkoutTitleTemplate;
 
-		var compiledTemplate = Handlebars.Compile(settings.WorkoutTitleTemplate);
+		var compiledTemplate = Handlebars.Compile(template);
 		var title = compiledTemplate(templateData);
 
 		var cleanedTitle = title.Replace(Space, SpaceSeparator);

@@ -57,8 +57,8 @@ namespace Conversion
 										.WithWorkoutId(workoutData.Workout.Id)
 										.WithTag(TagKey.Format, Format.ToString());
 
-			var status = new ConvertStatus();
 			var settings = await _settingsService.GetSettingsAsync();
+			var status = new ConvertStatus() { IsUploadFormat = settings.Garmin.Upload && settings.Garmin.FormatToUpload == Format };
 
 			if (!ShouldConvert(settings.Format))
 			{
@@ -110,7 +110,7 @@ namespace Conversion
 				CopyToLocalSaveDir(path, workoutTitle, settings);
 
 			// copy to upload dir
-			if (settings.Garmin.Upload && settings.Garmin.FormatToUpload == Format)
+			if (status.IsUploadFormat)
 			{
 				try
 				{
