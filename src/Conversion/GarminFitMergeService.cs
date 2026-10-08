@@ -416,17 +416,7 @@ public static class GarminFitMergeService
 	private static byte[] EncodeMessages(List<Mesg> messages)
 	{
 		using var stream = new MemoryStream();
-		var encoder = new Encode(ProtocolVersion.V20);
-		try
-		{
-			encoder.Open(stream);
-			encoder.Write(messages);
-		}
-		finally
-		{
-			encoder.Close();
-		}
-
+		FitWriter.Write(stream, messages);
 		return stream.ToArray();
 	}
 
