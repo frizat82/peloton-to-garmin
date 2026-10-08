@@ -76,6 +76,21 @@ public class ApiClient : IApiClient
 		}
 	}
 
+	public async Task<SettingsNotificationsGetResponse> SettingsNotificationsPostAsync(SettingsNotificationsPostRequest notificationSettings)
+	{
+		try
+		{
+			return await $"{_apiUrl}/api/settings/notifications"
+				.PostJsonAsync(notificationSettings)
+				.ReceiveJson<SettingsNotificationsGetResponse>();
+		}
+		catch (FlurlHttpException e)
+		{
+			var error = await e.GetResponseJsonAsync<ErrorResponse>();
+			throw new ApiClientException(error?.Message, e);
+		}
+	}
+
 	public async Task<SettingsPelotonGetResponse> SettingsPelotonPostAsync(SettingsPelotonPostRequest pelotonSettings)
 	{
 		try

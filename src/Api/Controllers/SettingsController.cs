@@ -39,6 +39,7 @@ public class SettingsController : Controller
 			var settingsResponse = new SettingsGetResponse(settings);
 			settingsResponse.Peloton.Password = null;
 			settingsResponse.Garmin.Password = null;
+			settingsResponse.EnvironmentOverrides = _settingsService.GetEnvironmentOverrides().ToList();
 
 			return settingsResponse;
 		}
@@ -148,6 +149,34 @@ public class SettingsController : Controller
 		try
 		{
 			var result = await _settingsUpdaterService.UpdateGarminSettingsAsync(updatedGarminSettings);
+
+			if (result.IsErrored())
+				return result.GetResultForError();
+
+			return Ok(result.Result);
+		}
+		catch (Exception e)
+		{
+			return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse($"Unexpected error occurred: {e.Message}"));
+		}
+	}
+
+	/// <summary>
+	/// Update Notification settings.
+	/// </summary>
+	/// <response code="200">Returns the notification settings</response>
+	/// <response code="400">If the request fields are invalid.</response>
+	/// <response code="500">Unhandled exception.</response>
+	[HttpPost]
+	[Route("/api/settings/notifications")]
+	[ProducesResponseType(typeof(SettingsNotificationsGetResponse), StatusCodes.Status200OK)]
+	[ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+	[ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+	public async Task<ActionResult<SettingsNotificationsGetResponse>> NotificationsPost([FromBody] SettingsNotificationsPostRequest updatedNotificationSettings)
+	{
+		try
+		{
+			var result = await _settingsUpdaterService.UpdateNotificationSettingsAsync(updatedNotificationSettings);
 
 			if (result.IsErrored())
 				return result.GetResultForError();

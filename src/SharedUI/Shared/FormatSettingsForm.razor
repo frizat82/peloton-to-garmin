@@ -209,7 +209,10 @@
 							</HeaderTemplate>
 							<BodyTemplate>
 								<HxSwitch Text="Include Time In HR Zones" @bind-Value="formatSettings.IncludeTimeInHRZones" />
-								<HxSwitch Text="Include Time in Power Zones" @bind-Value="formatSettings.IncludeTimeInPowerZones" />
+								<HxFormState Enabled="@(!powerZonesFromEnvironment)">
+									<HxSwitch Text="Include Time in Power Zones" @bind-Value="formatSettings.IncludeTimeInPowerZones"
+											  Hint="@(powerZonesFromEnvironment ? "Set by the P2G_FORMAT__INCLUDETIMEINPOWERZONES environment variable, so it can't be changed here." : null)" />
+								</HxFormState>
 							</BodyTemplate>
 						</HxCard>
 						<br />
@@ -234,6 +237,7 @@
 	private static ICollection<PreferredLapType> lapTypes = Enum.GetValues(typeof(PreferredLapType)).Cast<PreferredLapType>().ToList();
 
 	private Format formatSettings;
+	private bool powerZonesFromEnvironment;
 	private DeviceInfoModal? _deviceInfoModal;
 	private HxGrid<KeyValuePair<WorkoutType, GarminDeviceInfo>> _gridComponent = new();
 
@@ -267,6 +271,7 @@
 
 		var settings = await _apiClient.SettingsGetAsync();
 		formatSettings = settings.Format;
+		powerZonesFromEnvironment = settings.IsSetByEnvironment(nameof(Settings.Format), nameof(Format.IncludeTimeInPowerZones));
 		TitleTemplate_ValueChanged(formatSettings!.WorkoutTitleTemplate);
 
 		var systemInfo = await _apiClient.SystemInfoGetAsync(new SystemInfoGetRequest() { CheckForUpdate = settings.App.CheckForUpdates });

@@ -210,4 +210,72 @@ public class SettingsUpdaterServiceTests
 
 		return response.IsErrored();
 	}
+
+	private static (SettingsUpdaterService Service, Settings Settings) BuildForNotifications(string savedWebhook)
+	{
+		var autoMocker = new AutoMocker();
+		var settings = new Settings();
+		settings.Notifications.DiscordWebhookUrl = savedWebhook;
+		autoMocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(settings);
+		return (autoMocker.CreateInstance<SettingsUpdaterService>(), settings);
+	}
+
+	[Test]
+	public async Task UpdateNotificationSettingsAsync_With_NullRequest_ReturnsError()
+	{
+		var (service, _) = BuildForNotifications(null);
+
+		var response = await service.UpdateNotificationSettingsAsync(null);
+
+		response.IsErrored().Should().BeTrue();
+	}
+
+	[TestCase("http://discord.com/api/webhooks/1/abc")]
+	[TestCase("https://example.com/api/webhooks/1/abc")]
+	[TestCase("https://discord.com/channels/1")]
+	[TestCase("not a url")]
+	public async Task UpdateNotificationSettingsAsync_With_NonDiscordWebhook_ReturnsError(string url)
+	{
+		var (service, settings) = BuildForNotifications("https://discord.com/api/webhooks/saved");
+
+		var response = await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { DiscordWebhookUrl = url });
+
+		response.IsErrored().Should().BeTrue();
+		settings.Notifications.DiscordWebhookUrl.Should().Be("https://discord.com/api/webhooks/saved");
+	}
+
+	[Test]
+	public async Task UpdateNotificationSettingsAsync_With_NewWebhook_SavesIt()
+	{
+		var (service, settings) = BuildForNotifications(null);
+
+		var response = await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { DiscordWebhookUrl = " https://discord.com/api/webhooks/1/abc ", NotifyOnSuccess = true });
+
+		response.IsErrored().Should().BeFalse();
+		settings.Notifications.DiscordWebhookUrl.Should().Be("https://discord.com/api/webhooks/1/abc");
+		settings.Notifications.NotifyOnSuccess.Should().BeTrue();
+		response.Result.IsDiscordWebhookUrlSet.Should().BeTrue();
+	}
+
+	[Test]
+	public async Task UpdateNotificationSettingsAsync_With_NullWebhook_KeepsSavedOne()
+	{
+		var (service, settings) = BuildForNotifications("https://discord.com/api/webhooks/saved");
+
+		await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { DiscordWebhookUrl = null, NotifyOnSuccess = true });
+
+		settings.Notifications.DiscordWebhookUrl.Should().Be("https://discord.com/api/webhooks/saved");
+		settings.Notifications.NotifyOnSuccess.Should().BeTrue();
+	}
+
+	[Test]
+	public async Task UpdateNotificationSettingsAsync_With_EmptyWebhook_RemovesIt()
+	{
+		var (service, settings) = BuildForNotifications("https://discord.com/api/webhooks/saved");
+
+		var response = await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { DiscordWebhookUrl = string.Empty });
+
+		settings.Notifications.DiscordWebhookUrl.Should().BeNull();
+		response.Result.IsDiscordWebhookUrlSet.Should().BeFalse();
+	}
 }

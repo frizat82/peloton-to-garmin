@@ -127,4 +127,51 @@ public class SettingServiceTests
 		settings.Format.IncludeTimeInPowerZones.Should().BeTrue();
 		settings.Notifications.DiscordWebhookUrl.Should().BeNull();
 	}
+
+	[Test]
+	public void GetEnvironmentOverrides_ListsOnlyKeysSetByEnvironment()
+	{
+		var service = BuildWithConfig(new Settings(), new()
+		{
+			["Format:INCLUDETIMEINPOWERZONES"] = "true",
+			["Notifications:DiscordWebhookUrl"] = "https://discord.com/api/webhooks/1/abc",
+			["App:EnablePolling"] = "true",
+		});
+
+		service.GetEnvironmentOverrides().Should().BeEquivalentTo("Format.IncludeTimeInPowerZones", "Notifications.DiscordWebhookUrl");
+	}
+
+	[Test]
+	public async Task UpdateSettingsAsync_KeepsSavedValues_ForKeysSetByEnvironment()
+	{
+		// Like the real DB, every read returns a fresh copy of the saved settings.
+		static Settings SavedSettings()
+		{
+			var s = new Settings();
+			s.Format.IncludeTimeInPowerZones = false;
+			s.Notifications.DiscordWebhookUrl = "https://discord.com/api/webhooks/saved";
+			return s;
+		}
+		var mocker = new AutoMocker();
+		mocker.Use<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>
+		{
+			["Format:IncludeTimeInPowerZones"] = "true",
+			["Notifications:DiscordWebhookUrl"] = "https://discord.com/api/webhooks/env",
+		}).Build());
+		var db = mocker.GetMock<ISettingsDb>();
+		db.Setup(x => x.GetSettingsAsync(It.IsAny<int>())).ReturnsAsync(SavedSettings);
+		Settings saved = null;
+		db.Setup(x => x.UpsertSettingsAsync(It.IsAny<int>(), It.IsAny<Settings>())).Callback<int, Settings>((_, s) => saved = s).ReturnsAsync(true);
+		var service = mocker.CreateInstance<SettingsService>();
+
+		var settings = await service.GetSettingsAsync();
+		settings.Format.Fit = true;
+		settings.Notifications.NotifyOnSuccess = true;
+		await service.UpdateSettingsAsync(settings);
+
+		saved.Format.IncludeTimeInPowerZones.Should().BeFalse(because: "the environment's value is not the user's choice");
+		saved.Notifications.DiscordWebhookUrl.Should().Be("https://discord.com/api/webhooks/saved");
+		saved.Format.Fit.Should().BeTrue();
+		saved.Notifications.NotifyOnSuccess.Should().BeTrue();
+	}
 }

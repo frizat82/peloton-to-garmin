@@ -8,6 +8,9 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Common.Service;
@@ -47,9 +50,9 @@ public class SettingsService : ISettingsService
 			settings.Format.DeviceInfoSettings.Add(WorkoutType.None, Format.DefaultDeviceInfoSettings[WorkoutType.None]);
 
 		// P2G_FORMAT__* and P2G_NOTIFICATIONS__* override the saved settings, but only for the keys actually set.
-		_configurationLoader?.GetSection(nameof(Format))?.Bind(settings.Format);
 		settings.Notifications ??= new NotificationSettings();
-		_configurationLoader?.GetSection(nameof(Settings.Notifications))?.Bind(settings.Notifications);
+		foreach (var (section, target) in OverridableSections(settings))
+			_configurationLoader?.GetSection(section)?.Bind(target);
 
 		return settings;
 	}
@@ -66,10 +69,42 @@ public class SettingsService : ISettingsService
 		if (updatedSettings.Peloton.Password is null)
 			updatedSettings.Peloton.Password = originalSettings.Peloton.Password;
 
-		ClearPelotonApiAuthentication(originalSettings.Peloton.Email);
+		// Environment overrides are applied on read; keep the saved values for those keys rather than
+		// saving the environment's values as if they had been chosen in the WebUI.
+		var saved = originalSettings ?? new Settings();
+		saved.Notifications ??= new NotificationSettings();
+		updatedSettings.Notifications ??= new NotificationSettings();
+		var savedSections = OverridableSections(saved).ToDictionary(s => s.Section, s => s.Target);
+		foreach (var (section, target) in OverridableSections(updatedSettings))
+			foreach (var property in EnvironmentOverriddenProperties(section, target.GetType()))
+				property.SetValue(target, property.GetValue(savedSections[section]));
+
+		ClearPelotonApiAuthentication(originalSettings?.Peloton.Email);
 		ClearPelotonApiAuthentication(updatedSettings.Peloton.Email);
 
 		await _db.UpsertSettingsAsync(1, updatedSettings); // hardcode to admin user for now
+	}
+
+	public IReadOnlyCollection<string> GetEnvironmentOverrides()
+	{
+		return OverridableSections(new Settings())
+			.SelectMany(s => EnvironmentOverriddenProperties(s.Section, s.Target.GetType()).Select(p => $"{s.Section}.{p.Name}"))
+			.ToList();
+	}
+
+	private static IEnumerable<(string Section, object Target)> OverridableSections(Settings settings)
+	{
+		yield return (nameof(Settings.Format), settings.Format);
+		yield return (nameof(Settings.Notifications), settings.Notifications);
+	}
+
+	private IEnumerable<PropertyInfo> EnvironmentOverriddenProperties(string section, Type type)
+	{
+		var keys = _configurationLoader?.GetSection(section)?.GetChildren().Select(c => c.Key) ?? Enumerable.Empty<string>();
+		return keys
+			.Select(k => type.GetProperty(k, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase))
+			.Where(p => p is not null && p.CanWrite)
+			.Distinct();
 	}
 
 	public PelotonApiAuthentication GetPelotonApiAuthentication(string pelotonEmail)

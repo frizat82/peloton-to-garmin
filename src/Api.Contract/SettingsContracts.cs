@@ -11,6 +11,8 @@ public class SettingsGetResponse
 		Format = new Format();
 		Peloton = new SettingsPelotonGetResponse();
 		Garmin = new SettingsGarminGetResponse();
+		Notifications = new SettingsNotificationsGetResponse();
+		EnvironmentOverrides = new List<string>();
 	}
 
 	public SettingsGetResponse(Settings settings)
@@ -40,12 +42,43 @@ public class SettingsGetResponse
 			ActivityMatchWindowSeconds = settings.Garmin.ActivityMatchWindowSeconds,
 			Api = settings.Garmin.Api ?? new GarminApiSettings()
 		};
+
+		Notifications = new SettingsNotificationsGetResponse()
+		{
+			IsDiscordWebhookUrlSet = !string.IsNullOrWhiteSpace(settings.Notifications?.DiscordWebhookUrl),
+			NotifyOnSuccess = settings.Notifications?.NotifyOnSuccess ?? false,
+		};
+
+		EnvironmentOverrides = new List<string>();
 	}
 
 	public App App { get; set; }
 	public Format Format { get; set; }
 	public SettingsPelotonGetResponse Peloton { get; set; }
 	public SettingsGarminGetResponse Garmin { get; set; }
+	public SettingsNotificationsGetResponse Notifications { get; set; }
+
+	/// <summary>
+	/// Settings set by environment variables, as "Section.Property" (e.g. "Notifications.DiscordWebhookUrl").
+	/// They override the saved values, so the WebUI shows them as read-only.
+	/// </summary>
+	public ICollection<string> EnvironmentOverrides { get; set; }
+
+	public bool IsSetByEnvironment(string section, string property) => EnvironmentOverrides?.Contains($"{section}.{property}") ?? false;
+}
+
+public class SettingsNotificationsGetResponse
+{
+	/// <summary>The webhook URL is a secret, so only whether one is set is returned.</summary>
+	public bool IsDiscordWebhookUrlSet { get; set; }
+	public bool NotifyOnSuccess { get; set; }
+}
+
+public class SettingsNotificationsPostRequest
+{
+	/// <summary>Null keeps the saved webhook URL; an empty string removes it.</summary>
+	public string? DiscordWebhookUrl { get; set; }
+	public bool NotifyOnSuccess { get; set; }
 }
 
 public class SettingsGarminGetResponse
