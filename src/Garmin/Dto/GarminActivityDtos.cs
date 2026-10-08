@@ -112,7 +112,6 @@ public class GarminMergeRecord
 public class PendingMergeVerification
 {
 	public long OriginalGarminActivityId { get; set; }
-	public string PelotonWorkoutId { get; set; }
 	public DateTime WorkoutStartUtc { get; set; }
 	/// <summary>Start of the watch recording; the merged upload keeps it, which is how it is told apart from nearby activities.</summary>
 	public DateTime ActivityStartUtc { get; set; }

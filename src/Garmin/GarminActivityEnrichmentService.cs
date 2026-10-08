@@ -1,4 +1,4 @@
-﻿using Common.Dto;
+using Common.Dto;
 using Common.Dto.Peloton;
 using Common.Helpers;
 using Common.Observe;
@@ -381,15 +381,15 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				_logger.Information("FIT merge: updated activity name to '{Name}' for new activity {NewId}", nameUpdate.ActivityName, newActivityId.Value);
 			}
 
+			// The check finds the upload again by its exact start time rather than trusting newActivityId,
+			// which the search above can confuse with another activity uploaded at the same time.
 			await ScheduleVerificationAsync(new PendingMergeVerification
 			{
 				OriginalGarminActivityId = garminActivityId,
-				PelotonWorkoutId = primary.P2GWorkout.Workout.Id,
 				WorkoutStartUtc = workoutStart,
 				ActivityStartUtc = primary.Result.GarminActivityStartTimeUtc ?? default,
 				ActivityName = activityName,
 				Description = description,
-				GarminActivityId = newActivityId,
 				PreExistingActivityIds = preExistingIds.Append(garminActivityId).ToList(),
 			}, mergedFitBytes);
 
@@ -434,15 +434,14 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			if (pending.ExpectedCadenceRecords == 0 && pending.ExpectedPowerRecords == 0)
 				return;
 
-			var dir = GarminMergeVerificationService.GetPendingFitDirectory();
-			Directory.CreateDirectory(dir);
-			pending.MergedFitPath = Path.Join(dir, $"{pending.OriginalGarminActivityId}.fit");
+			Directory.CreateDirectory(GetFitBackupDirectory());
+			pending.MergedFitPath = GarminMergeVerificationService.GetPendingFitPath(pending.OriginalGarminActivityId);
 			await File.WriteAllBytesAsync(pending.MergedFitPath, mergedFitBytes);
 
 			pending.UploadedAtUtc = DateTime.UtcNow;
 			pending.CheckAfterUtc = pending.UploadedAtUtc + GarminMergeVerificationService.VerifyDelay;
 			await _mergeDb.UpsertPendingVerificationAsync(pending);
-			_logger.Information("FIT merge: will check Garmin kept cadence and power for {GarminActivityId} after {CheckAfter:u}", pending.GarminActivityId, pending.CheckAfterUtc);
+			_logger.Information("FIT merge: will check Garmin kept cadence and power for the merge of {GarminActivityId} after {CheckAfter:u}", pending.OriginalGarminActivityId, pending.CheckAfterUtc);
 		}
 		catch (Exception e)
 		{
