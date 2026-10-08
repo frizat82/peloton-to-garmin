@@ -162,8 +162,10 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 
 		var settings = await _settingsService.GetSettingsAsync();
 		settings.Notifications ??= new NotificationSettings();
-		if (webhookUrl is not null)
-			settings.Notifications.DiscordWebhookUrl = webhookUrl == string.Empty ? null : webhookUrl;
+		if (updatedNotificationSettings.RemoveDiscordWebhookUrl)
+			settings.Notifications.DiscordWebhookUrl = null;
+		else if (!string.IsNullOrEmpty(webhookUrl))
+			settings.Notifications.DiscordWebhookUrl = webhookUrl;
 		settings.Notifications.NotifyOnSuccess = updatedNotificationSettings.NotifyOnSuccess;
 
 		await _settingsService.UpdateSettingsAsync(settings);
@@ -177,9 +179,8 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 	{
 		return Uri.TryCreate(url, UriKind.Absolute, out var uri)
 			&& uri.Scheme == Uri.UriSchemeHttps
-			&& (uri.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase)
-				|| uri.Host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase)
-				|| uri.Host.EndsWith(".discord.com", StringComparison.OrdinalIgnoreCase))
+			&& new[] { "discord.com", "discordapp.com" }.Any(domain =>
+				uri.Host.Equals(domain, StringComparison.OrdinalIgnoreCase) || uri.Host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
 			&& uri.AbsolutePath.StartsWith("/api/webhooks/", StringComparison.OrdinalIgnoreCase);
 	}
 }

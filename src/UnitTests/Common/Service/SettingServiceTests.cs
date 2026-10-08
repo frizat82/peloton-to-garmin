@@ -78,12 +78,63 @@ public class SettingServiceTests
 			chosenDeviceInfo.Should().Be(deviceInfoSettings[WorkoutType.None]);
 		}
 	}
-	private static SettingsService BuildWithConfig(Settings dbSettings, Dictionary<string, string> config)
+	private readonly List<string> _testEnvironmentVariables = new();
+
+	[TearDown]
+	public void ClearTestEnvironmentVariables()
+	{
+		foreach (var name in _testEnvironmentVariables)
+			System.Environment.SetEnvironmentVariable(name, null);
+		_testEnvironmentVariables.Clear();
+	}
+
+	/// <summary>
+	/// Builds configuration the way the app does: environment variables under a prefix (unique per test, standing in
+	/// for P2G_), with "Section:Key" written as SECTION__KEY.
+	/// </summary>
+	private IConfiguration BuildEnvironmentConfig(Dictionary<string, string> env, Dictionary<string, string> fileConfig = null)
+	{
+		var prefix = $"P2GTEST{System.Guid.NewGuid():N}_";
+		foreach (var (key, value) in env)
+		{
+			var name = prefix + key.Replace(":", "__");
+			_testEnvironmentVariables.Add(name);
+			System.Environment.SetEnvironmentVariable(name, value);
+		}
+		return new ConfigurationBuilder()
+			.AddInMemoryCollection(fileConfig ?? new Dictionary<string, string>())
+			.AddEnvironmentVariables(prefix)
+			.Build();
+	}
+
+	private SettingsService BuildWithConfig(Settings dbSettings, Dictionary<string, string> env, Dictionary<string, string> fileConfig = null)
 	{
 		var mocker = new AutoMocker();
-		mocker.Use<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(config).Build());
+		mocker.Use<IConfiguration>(BuildEnvironmentConfig(env, fileConfig));
 		mocker.GetMock<ISettingsDb>().Setup(x => x.GetSettingsAsync(It.IsAny<int>())).ReturnsAsync(dbSettings);
 		return mocker.CreateInstance<SettingsService>();
+	}
+
+	[Test]
+	public async Task GetSettingsAsync_IgnoresNestedInvalidAndNonEnvironmentValues()
+	{
+		var dbSettings = new Settings();
+		dbSettings.Format.Fit = true;
+		dbSettings.Notifications.NotifyOnSuccess = false;
+		var service = BuildWithConfig(dbSettings,
+			env: new()
+			{
+				["Format:Cycling:PreferredLapType"] = "Distance",
+				["Notifications:NotifyOnSuccess"] = "yes",
+			},
+			fileConfig: new() { ["Format:Fit"] = "false" });
+
+		var settings = await service.GetSettingsAsync();
+
+		settings.Format.Fit.Should().BeTrue(because: "configuration files are not environment overrides");
+		settings.Notifications.NotifyOnSuccess.Should().BeFalse(because: "'yes' is not a valid bool");
+		settings.Format.Cycling.PreferredLapType.Should().NotBe(PreferredLapType.Distance, because: "nested keys are not overridden");
+		service.GetEnvironmentOverrides().Should().BeEmpty();
 	}
 
 	[Test]
@@ -153,11 +204,11 @@ public class SettingServiceTests
 			return s;
 		}
 		var mocker = new AutoMocker();
-		mocker.Use<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string>
+		mocker.Use<IConfiguration>(BuildEnvironmentConfig(new()
 		{
 			["Format:IncludeTimeInPowerZones"] = "true",
 			["Notifications:DiscordWebhookUrl"] = "https://discord.com/api/webhooks/env",
-		}).Build());
+		}));
 		var db = mocker.GetMock<ISettingsDb>();
 		db.Setup(x => x.GetSettingsAsync(It.IsAny<int>())).ReturnsAsync(SavedSettings);
 		Settings saved = null;

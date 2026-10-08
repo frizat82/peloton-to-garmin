@@ -66,10 +66,13 @@
 
 	private static string EnvironmentHint(string key) => $"Set by the P2G_NOTIFICATIONS__{key} environment variable, so it can't be changed here.";
 
-	protected void RemoveWebhook()
+	// Removing saves straight away, so the page never shows the webhook as removed while it is still stored.
+	protected async Task RemoveWebhook()
 	{
-		request.DiscordWebhookUrl = string.Empty;
-		notificationSettings.IsDiscordWebhookUrlSet = false;
+		request.DiscordWebhookUrl = null;
+		request.RemoveDiscordWebhookUrl = true;
+		await SaveNotificationSettings();
+		request.RemoveDiscordWebhookUrl = false;
 	}
 
 	protected async Task SaveNotificationSettings()

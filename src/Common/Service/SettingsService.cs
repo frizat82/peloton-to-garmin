@@ -25,6 +25,10 @@ public class SettingsService : ISettingsService
 	private readonly IMemoryCache _cache;
 	private readonly IConfiguration _configurationLoader;
 	private readonly IFileHandling _fileHandler;
+	private readonly IReadOnlyList<EnvironmentOverride> _environmentOverrides;
+
+	/// <summary>A P2G_FORMAT__* or P2G_NOTIFICATIONS__* environment variable that overrides one saved setting.</summary>
+	private record EnvironmentOverride(string Section, PropertyInfo Property, object Value);
 
 	public SettingsService(ISettingsDb db, IMemoryCache cache, IConfiguration configurationLoader, IFileHandling fileHandler)
 	{
@@ -32,6 +36,7 @@ public class SettingsService : ISettingsService
 		_cache = cache;
 		_configurationLoader = configurationLoader;
 		_fileHandler = fileHandler;
+		_environmentOverrides = LoadEnvironmentOverrides(configurationLoader);
 	}
 
 	public async Task<Settings> GetSettingsAsync()
@@ -49,10 +54,9 @@ public class SettingsService : ISettingsService
 		if (!settings.Format.DeviceInfoSettings.TryGetValue(WorkoutType.None, out var _))
 			settings.Format.DeviceInfoSettings.Add(WorkoutType.None, Format.DefaultDeviceInfoSettings[WorkoutType.None]);
 
-		// P2G_FORMAT__* and P2G_NOTIFICATIONS__* override the saved settings, but only for the keys actually set.
 		settings.Notifications ??= new NotificationSettings();
-		foreach (var (section, target) in OverridableSections(settings))
-			_configurationLoader?.GetSection(section)?.Bind(target);
+		foreach (var o in _environmentOverrides)
+			o.Property.SetValue(SectionOf(settings, o.Section), o.Value);
 
 		return settings;
 	}
@@ -61,7 +65,7 @@ public class SettingsService : ISettingsService
 	{
 		using var tracing = Tracing.Trace($"{nameof(SettingsService)}.{nameof(UpdateSettingsAsync)}");
 
-		var originalSettings = await _db.GetSettingsAsync(1); // hardcode to admin user for now
+		var originalSettings = await _db.GetSettingsAsync(1) ?? new Settings(); // hardcode to admin user for now
 
 		if (updatedSettings.Garmin.Password is null)
 			updatedSettings.Garmin.Password = originalSettings.Garmin.Password;
@@ -71,15 +75,12 @@ public class SettingsService : ISettingsService
 
 		// Environment overrides are applied on read; keep the saved values for those keys rather than
 		// saving the environment's values as if they had been chosen in the WebUI.
-		var saved = originalSettings ?? new Settings();
-		saved.Notifications ??= new NotificationSettings();
+		originalSettings.Notifications ??= new NotificationSettings();
 		updatedSettings.Notifications ??= new NotificationSettings();
-		var savedSections = OverridableSections(saved).ToDictionary(s => s.Section, s => s.Target);
-		foreach (var (section, target) in OverridableSections(updatedSettings))
-			foreach (var property in EnvironmentOverriddenProperties(section, target.GetType()))
-				property.SetValue(target, property.GetValue(savedSections[section]));
+		foreach (var o in _environmentOverrides)
+			o.Property.SetValue(SectionOf(updatedSettings, o.Section), o.Property.GetValue(SectionOf(originalSettings, o.Section)));
 
-		ClearPelotonApiAuthentication(originalSettings?.Peloton.Email);
+		ClearPelotonApiAuthentication(originalSettings.Peloton.Email);
 		ClearPelotonApiAuthentication(updatedSettings.Peloton.Email);
 
 		await _db.UpsertSettingsAsync(1, updatedSettings); // hardcode to admin user for now
@@ -87,24 +88,54 @@ public class SettingsService : ISettingsService
 
 	public IReadOnlyCollection<string> GetEnvironmentOverrides()
 	{
-		return OverridableSections(new Settings())
-			.SelectMany(s => EnvironmentOverriddenProperties(s.Section, s.Target.GetType()).Select(p => $"{s.Section}.{p.Name}"))
-			.ToList();
+		return _environmentOverrides.Select(o => $"{o.Section}.{o.Property.Name}").ToList();
 	}
 
-	private static IEnumerable<(string Section, object Target)> OverridableSections(Settings settings)
+	private static bool IsSimpleType(Type type)
 	{
-		yield return (nameof(Settings.Format), settings.Format);
-		yield return (nameof(Settings.Notifications), settings.Notifications);
+		type = Nullable.GetUnderlyingType(type) ?? type;
+		return type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal);
 	}
 
-	private IEnumerable<PropertyInfo> EnvironmentOverriddenProperties(string section, Type type)
+	private static object SectionOf(Settings settings, string section) => section == nameof(Settings.Format) ? settings.Format : settings.Notifications;
+
+	/// <summary>
+	/// Reads the P2G_FORMAT__* and P2G_NOTIFICATIONS__* environment variables once. Only environment variables count
+	/// (not configuration files), and only top-level values such as P2G_FORMAT__INCLUDETIMEINPOWERZONES; nested keys
+	/// and values that can't be converted are ignored with a warning.
+	/// </summary>
+	private static IReadOnlyList<EnvironmentOverride> LoadEnvironmentOverrides(IConfiguration configuration)
 	{
-		var keys = _configurationLoader?.GetSection(section)?.GetChildren().Select(c => c.Key) ?? Enumerable.Empty<string>();
-		return keys
-			.Select(k => type.GetProperty(k, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase))
-			.Where(p => p is not null && p.CanWrite)
-			.Distinct();
+		var envProviders = (configuration as IConfigurationRoot)?.Providers
+			.OfType<Microsoft.Extensions.Configuration.EnvironmentVariables.EnvironmentVariablesConfigurationProvider>()
+			.ToList<IConfigurationProvider>();
+		if (envProviders is null || envProviders.Count == 0)
+			return Array.Empty<EnvironmentOverride>();
+
+		var environment = new ConfigurationRoot(envProviders);
+		var overrides = new List<EnvironmentOverride>();
+		foreach (var (section, type) in new[] { (nameof(Settings.Format), typeof(Format)), (nameof(Settings.Notifications), typeof(NotificationSettings)) })
+		{
+			foreach (var child in environment.GetSection(section).GetChildren())
+			{
+				var property = type.GetProperty(child.Key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+				if (property is null || !property.CanWrite || child.Value is null || !IsSimpleType(property.PropertyType))
+				{
+					_logger.Warning("Ignoring environment variable for {Section}:{Key}; only top-level {Section} settings can be overridden.", section, child.Key, section);
+					continue;
+				}
+
+				try
+				{
+					overrides.Add(new EnvironmentOverride(section, property, child.Get(property.PropertyType)));
+				}
+				catch (Exception e)
+				{
+					_logger.Warning(e, "Ignoring environment variable for {Section}:{Key}: '{Value}' is not a valid value.", section, child.Key, child.Value);
+				}
+			}
+		}
+		return overrides;
 	}
 
 	public PelotonApiAuthentication GetPelotonApiAuthentication(string pelotonEmail)

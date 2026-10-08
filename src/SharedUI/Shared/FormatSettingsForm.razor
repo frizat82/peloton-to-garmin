@@ -5,6 +5,13 @@
 
 <DeviceInfoModal @ref="_deviceInfoModal" />
 
+@if (otherEnvironmentOverrides.Any())
+{
+	<HxAlert Color="ThemeColor.Info">
+		These settings are set by <code>P2G_FORMAT__*</code> environment variables, so changes to them here won't be saved: @string.Join(", ", otherEnvironmentOverrides)
+	</HxAlert>
+}
+
 <EditForm Model="@formatSettings">
 	<div class="row g-3">
 		<div class="col-md-12">
@@ -238,6 +245,7 @@
 
 	private Format formatSettings;
 	private bool powerZonesFromEnvironment;
+	private ICollection<string> otherEnvironmentOverrides = new List<string>();
 	private DeviceInfoModal? _deviceInfoModal;
 	private HxGrid<KeyValuePair<WorkoutType, GarminDeviceInfo>> _gridComponent = new();
 
@@ -272,6 +280,10 @@
 		var settings = await _apiClient.SettingsGetAsync();
 		formatSettings = settings.Format;
 		powerZonesFromEnvironment = settings.IsSetByEnvironment(nameof(Settings.Format), nameof(Format.IncludeTimeInPowerZones));
+		otherEnvironmentOverrides = settings.EnvironmentOverrides
+			.Where(o => o.StartsWith($"{nameof(Settings.Format)}.") && o != $"{nameof(Settings.Format)}.{nameof(Format.IncludeTimeInPowerZones)}")
+			.Select(o => o[(nameof(Settings.Format).Length + 1)..])
+			.ToList();
 		TitleTemplate_ValueChanged(formatSettings!.WorkoutTitleTemplate);
 
 		var systemInfo = await _apiClient.SystemInfoGetAsync(new SystemInfoGetRequest() { CheckForUpdate = settings.App.CheckForUpdates });

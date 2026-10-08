@@ -109,6 +109,8 @@ Then open `http://localhost:8002` in your browser to configure your Peloton and 
 
 Configuration can be passed as environment variables using the `P2G_` prefix with `__` as the section separator.
 
+When you run the API and WebUI, `P2G_FORMAT__*` and `P2G_NOTIFICATIONS__*` variables override the values saved in the WebUI Settings page. The Settings page shows those settings as read-only and names the variable that sets them. Only top-level settings can be overridden this way. Nested keys such as `P2G_FORMAT__CYCLING__PREFERREDLAPTYPE`, and values that aren't valid, are ignored with a warning in the API log.
+
 | Variable | Default | Description |
 |---|---|---|
 | `P2G_PELOTON__EMAIL` | — | Peloton account email |

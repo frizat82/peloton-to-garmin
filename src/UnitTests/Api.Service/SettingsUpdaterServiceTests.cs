@@ -231,6 +231,7 @@ public class SettingsUpdaterServiceTests
 	}
 
 	[TestCase("http://discord.com/api/webhooks/1/abc")]
+	[TestCase("https://evildiscord.com/api/webhooks/1/abc")]
 	[TestCase("https://example.com/api/webhooks/1/abc")]
 	[TestCase("https://discord.com/channels/1")]
 	[TestCase("not a url")]
@@ -242,6 +243,19 @@ public class SettingsUpdaterServiceTests
 
 		response.IsErrored().Should().BeTrue();
 		settings.Notifications.DiscordWebhookUrl.Should().Be("https://discord.com/api/webhooks/saved");
+	}
+
+	[Test]
+	[TestCase("https://canary.discordapp.com/api/webhooks/1/abc")]
+	[TestCase("https://ptb.discord.com/api/webhooks/1/abc")]
+	public async Task UpdateNotificationSettingsAsync_With_DiscordSubdomainWebhook_SavesIt(string url)
+	{
+		var (service, settings) = BuildForNotifications(null);
+
+		var response = await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { DiscordWebhookUrl = url });
+
+		response.IsErrored().Should().BeFalse();
+		settings.Notifications.DiscordWebhookUrl.Should().Be(url);
 	}
 
 	[Test]
@@ -269,11 +283,21 @@ public class SettingsUpdaterServiceTests
 	}
 
 	[Test]
-	public async Task UpdateNotificationSettingsAsync_With_EmptyWebhook_RemovesIt()
+	public async Task UpdateNotificationSettingsAsync_With_EmptyWebhook_KeepsSavedOne()
 	{
 		var (service, settings) = BuildForNotifications("https://discord.com/api/webhooks/saved");
 
-		var response = await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { DiscordWebhookUrl = string.Empty });
+		await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { DiscordWebhookUrl = string.Empty });
+
+		settings.Notifications.DiscordWebhookUrl.Should().Be("https://discord.com/api/webhooks/saved");
+	}
+
+	[Test]
+	public async Task UpdateNotificationSettingsAsync_With_Remove_RemovesWebhook()
+	{
+		var (service, settings) = BuildForNotifications("https://discord.com/api/webhooks/saved");
+
+		var response = await service.UpdateNotificationSettingsAsync(new SettingsNotificationsPostRequest { RemoveDiscordWebhookUrl = true });
 
 		settings.Notifications.DiscordWebhookUrl.Should().BeNull();
 		response.Result.IsDiscordWebhookUrlSet.Should().BeFalse();

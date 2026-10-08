@@ -76,8 +76,9 @@ public class SettingsNotificationsGetResponse
 
 public class SettingsNotificationsPostRequest
 {
-	/// <summary>Null keeps the saved webhook URL; an empty string removes it.</summary>
+	/// <summary>A new webhook URL to save; null or blank keeps the saved one.</summary>
 	public string? DiscordWebhookUrl { get; set; }
+	public bool RemoveDiscordWebhookUrl { get; set; }
 	public bool NotifyOnSuccess { get; set; }
 }
 
