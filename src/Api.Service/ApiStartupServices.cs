@@ -24,6 +24,7 @@ public static class ApiStartupServices
 	{
 		// HOSTED SERVICES
 		services.AddHostedService<BackgroundSyncJob>();
+		services.AddHostedService<MergeVerificationJob>();
 		services.AddHttpClient();
 
 		// CACHE
@@ -39,6 +40,7 @@ public static class ApiStartupServices
 		services.AddSingleton<IGarminApiClient, Garmin.ApiClient>();
 		services.AddSingleton<IGarminAuthenticationService, GarminAuthenticationService>();
 		services.AddSingleton<IGarminActivityEnrichmentService, GarminActivityEnrichmentService>();
+		services.AddSingleton<IGarminMergeVerificationService, GarminMergeVerificationService>();
 		services.AddSingleton<IGarminDb, GarminDb>();
 		services.AddSingleton<IGarminMergeDb, GarminMergeDb>();
 

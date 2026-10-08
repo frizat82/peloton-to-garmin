@@ -16,6 +16,10 @@ public interface IGarminMergeDb
 {
 	Task<ICollection<GarminMergeRecord>> GetRecentAsync(int count = 50);
 	Task SaveAsync(GarminMergeRecord record);
+
+	Task<ICollection<PendingMergeVerification>> GetPendingVerificationsAsync();
+	Task UpsertPendingVerificationAsync(PendingMergeVerification pending);
+	Task RemovePendingVerificationAsync(long originalGarminActivityId);
 }
 
 public class GarminMergeDb : DbBase<GarminMergeRecord>, IGarminMergeDb
@@ -66,5 +70,23 @@ public class GarminMergeDb : DbBase<GarminMergeRecord>, IGarminMergeDb
 
 		var collection = _db.GetCollection<GarminMergeRecord>();
 		return collection.InsertOneAsync(record);
+	}
+
+	public Task<ICollection<PendingMergeVerification>> GetPendingVerificationsAsync()
+	{
+		ICollection<PendingMergeVerification> result = _db.GetCollection<PendingMergeVerification>().AsQueryable().ToList();
+		return Task.FromResult(result);
+	}
+
+	public Task UpsertPendingVerificationAsync(PendingMergeVerification pending)
+	{
+		return _db.GetCollection<PendingMergeVerification>()
+			.ReplaceOneAsync(p => p.OriginalGarminActivityId == pending.OriginalGarminActivityId, pending, upsert: true);
+	}
+
+	public Task RemovePendingVerificationAsync(long originalGarminActivityId)
+	{
+		return _db.GetCollection<PendingMergeVerification>()
+			.DeleteOneAsync(p => p.OriginalGarminActivityId == originalGarminActivityId);
 	}
 }

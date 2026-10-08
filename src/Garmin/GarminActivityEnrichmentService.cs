@@ -367,17 +367,30 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 				_logger.Information("FIT merge: new activity not visible yet (attempt {Attempt}/5)", attempt);
 			}
 
+			var activityName = BuildActivityName(primary.P2GWorkout.Workout);
+			var description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples);
 			if (newActivityId is not null)
 			{
 				var nameUpdate = new GarminActivityUpdateRequest
 				{
 					ActivityId = newActivityId.Value,
-					ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
-					Description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples),
+					ActivityName = activityName,
+					Description = description,
 				};
 				await _apiClient.UpdateActivityAsync(newActivityId.Value, nameUpdate, auth);
 				_logger.Information("FIT merge: updated activity name to '{Name}' for new activity {NewId}", nameUpdate.ActivityName, newActivityId.Value);
 			}
+
+			await ScheduleVerificationAsync(new PendingMergeVerification
+			{
+				OriginalGarminActivityId = garminActivityId,
+				PelotonWorkoutId = primary.P2GWorkout.Workout.Id,
+				WorkoutStartUtc = workoutStart,
+				ActivityName = activityName,
+				Description = description,
+				GarminActivityId = newActivityId,
+				PreExistingActivityIds = preExistingIds.Append(garminActivityId).ToList(),
+			}, mergedFitBytes);
 
 			return (MergeStatus.Success, null);
 		}
@@ -409,6 +422,30 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		{
 			if (File.Exists(tempPath))
 				File.Delete(tempPath);
+		}
+	}
+
+	private async Task ScheduleVerificationAsync(PendingMergeVerification pending, byte[] mergedFitBytes)
+	{
+		try
+		{
+			var (cadenceRecords, powerRecords) = GarminFitMergeService.CountCadenceAndPowerRecords(mergedFitBytes);
+			if (cadenceRecords == 0 && powerRecords == 0)
+				return;
+
+			var dir = GarminMergeVerificationService.GetPendingFitDirectory();
+			Directory.CreateDirectory(dir);
+			pending.MergedFitPath = Path.Join(dir, $"{pending.OriginalGarminActivityId}.fit");
+			await File.WriteAllBytesAsync(pending.MergedFitPath, mergedFitBytes);
+
+			pending.UploadedAtUtc = DateTime.UtcNow;
+			pending.CheckAfterUtc = pending.UploadedAtUtc + GarminMergeVerificationService.VerifyDelay;
+			await _mergeDb.UpsertPendingVerificationAsync(pending);
+			_logger.Information("FIT merge: will check Garmin kept cadence and power for {GarminActivityId} after {CheckAfter:u}", pending.GarminActivityId, pending.CheckAfterUtc);
+		}
+		catch (Exception e)
+		{
+			_logger.Warning(e, "FIT merge: could not schedule the upload check for {GarminActivityId}", pending.OriginalGarminActivityId);
 		}
 	}
 
@@ -488,7 +525,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		return (best.Activity, best.DeltaSeconds);
 	}
 
-	private static bool TryParseGarminStartTime(string startTimeGmt, out DateTime result)
+	internal static bool TryParseGarminStartTime(string startTimeGmt, out DateTime result)
 	{
 		result = default;
 		if (string.IsNullOrEmpty(startTimeGmt))

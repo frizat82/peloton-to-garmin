@@ -66,6 +66,22 @@ public static class GarminFitMergeService
 		return EncodeMessages(mergedMessages);
 	}
 
+	/// <summary>
+	/// Counts the records that carry a valid cadence and a valid power value.
+	/// </summary>
+	public static (int CadenceRecords, int PowerRecords) CountCadenceAndPowerRecords(byte[] fitBytes)
+	{
+		int cadence = 0, power = 0;
+		foreach (var mesg in DecodeAllMessages(fitBytes))
+		{
+			if (mesg.Num != MesgNum.Record) continue;
+			var record = new RecordMesg(mesg);
+			if (record.GetCadence() is byte c && c != byte.MaxValue) cadence++;
+			if (record.GetPower() is ushort p && p != ushort.MaxValue) power++;
+		}
+		return (cadence, power);
+	}
+
 	private static void LogTimingDiagnostics(List<Mesg> messages, Dictionary<uint, PelotonSample> pelotonMap, long workoutStartUnix)
 	{
 		if (pelotonMap.Count == 0) return;

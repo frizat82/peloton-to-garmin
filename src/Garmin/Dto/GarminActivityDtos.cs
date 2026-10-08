@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Garmin.Dto;
@@ -102,6 +103,29 @@ public class GarminMergeRecord
 	public MergeSource Source { get; set; }
 	public MergeStatus Status { get; set; } = MergeStatus.Success;
 	public string StatusDetail { get; set; }
+}
+
+/// <summary>
+/// A merged FIT upload that still needs checking. Garmin occasionally keeps the activity but drops
+/// its cadence and power, so the upload is checked later and re-sent if the data is missing.
+/// </summary>
+public class PendingMergeVerification
+{
+	public long OriginalGarminActivityId { get; set; }
+	public string PelotonWorkoutId { get; set; }
+	public DateTime WorkoutStartUtc { get; set; }
+	public string ActivityName { get; set; }
+	public string Description { get; set; }
+	public string MergedFitPath { get; set; }
+	/// <summary>The uploaded activity, or null while it is unknown or deleted for a re-upload.</summary>
+	public long? GarminActivityId { get; set; }
+	/// <summary>Activities near the workout start that existed before the latest upload.</summary>
+	public List<long> PreExistingActivityIds { get; set; } = new();
+	public DateTime UploadedAtUtc { get; set; }
+	public DateTime CheckAfterUtc { get; set; }
+	/// <summary>Set when a bad upload has been deleted and the merged FIT is waiting to be re-uploaded.</summary>
+	public long? DeletedGarminActivityId { get; set; }
+	public int Reuploads { get; set; }
 }
 
 public enum MergeSource { Auto, Manual }
