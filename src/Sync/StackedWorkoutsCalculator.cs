@@ -63,6 +63,11 @@ public static class StackedWorkoutsCalculator
 	}
 
 	/// <summary>
+	/// Splits a stacked workout's ID (see <see cref="CombineStackedWorkouts"/>) back into its constituent Peloton workout IDs.
+	/// </summary>
+	public static string[] GetConstituentWorkoutIds(string? workoutId) => workoutId?.Split(',') ?? Array.Empty<string>();
+
+	/// <summary>
 	/// Given workouts grouped into stacks, combines those stacks into one unified workout each.
 	/// </summary>
 	/// <param name="stacks"></param>

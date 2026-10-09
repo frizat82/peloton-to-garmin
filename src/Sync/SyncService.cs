@@ -142,18 +142,24 @@ namespace Sync
 			}
 
 			var convertStatuses = new List<ConvertStatus>();
+			var failedWorkouts = new HashSet<P2GWorkout>();
 			try
 			{
 				_logger.Information("Converting workouts...");
-				var tasks = new List<Task<ConvertStatus>>();
+				var tasks = new List<(P2GWorkout Workout, Task<ConvertStatus> Task)>();
 				foreach (var workout in stackedWorkouts)
 				{
 					workout.UserData = userData;
-					tasks.AddRange(_converters.Select(c => c.ConvertAsync(workout)));
+					tasks.AddRange(_converters.Select(c => (workout, c.ConvertAsync(workout))));
 				}
 
-				await Task.WhenAll(tasks);
-				convertStatuses = tasks.Select(t => t.GetAwaiter().GetResult()).ToList();
+				await Task.WhenAll(tasks.Select(t => t.Task));
+				var results = tasks.Select(t => (t.Workout, Status: t.Task.Result)).ToList();
+				convertStatuses = results.Select(r => r.Status).ToList();
+
+				foreach (var group in results.GroupBy(r => r.Workout))
+					if (ShouldRetryConversion(group.Select(r => r.Status)))
+						failedWorkouts.Add(group.Key);
 			}
 			catch (Exception e)
 			{
@@ -193,15 +199,15 @@ namespace Sync
 			// Matched workouts have their upload files removed so they won't be re-uploaded.
 			try
 			{
-				var mergeResults = await _enrichmentService.EnrichAsync(stackedWorkouts);
+				// Skip workouts that failed to convert: they are retried next sync and must not be merged repeatedly.
+				var mergeResults = await _enrichmentService.EnrichAsync(stackedWorkouts.Where(w => !failedWorkouts.Contains(w)).ToList());
 				response.MergeResults = mergeResults;
 
 				if (mergeResults.Any() && _fileHandler.DirExists(settings.App.UploadDirectory))
 				{
-					// Stacked workout IDs are comma-joined (e.g. "abc,def"); flatten to individual constituent
-					// IDs so each file can be matched by checking whether any part is a prefix of the filename.
+					// Match each file by checking whether any constituent workout ID is a prefix of the filename.
 					var mergedIdParts = new HashSet<string>(
-						mergeResults.SelectMany(r => r.PelotonWorkoutId.Split(',')),
+						mergeResults.SelectMany(r => StackedWorkoutsCalculator.GetConstituentWorkoutIds(r.PelotonWorkoutId)),
 						StringComparer.OrdinalIgnoreCase);
 
 					foreach (var file in Directory.GetFiles(settings.App.UploadDirectory))
@@ -269,8 +275,12 @@ namespace Sync
 			}
 
 			response.SyncSuccess = true;
-			_logger.Information("Sync complete: {Count} workout(s) uploaded to Garmin.", workoutIds.Count());
-			await _syncedWorkoutsDb.MarkSyncedAsync(workoutIds);
+			var failedWorkoutIds = failedWorkouts.SelectMany(w => StackedWorkoutsCalculator.GetConstituentWorkoutIds(w.Workout?.Id)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+			var syncedWorkoutIds = workoutIds.Where(id => !failedWorkoutIds.Contains(id)).ToList();
+			if (failedWorkoutIds.Count > 0)
+				_logger.Warning("{Count} workout(s) failed to convert and will be retried on the next sync: {WorkoutIds}", failedWorkoutIds.Count, failedWorkoutIds);
+			_logger.Information("Sync complete: {Count} workout(s) synced.", syncedWorkoutIds.Count);
+			await _syncedWorkoutsDb.MarkSyncedAsync(syncedWorkoutIds);
 			return response;
 		}
 
@@ -292,6 +302,17 @@ namespace Sync
 			}
 
 			return await _enrichmentService.PreviewAsync(workouts);
+		}
+
+		/// <summary>
+		/// A workout must not be marked synced if its upload file was not produced, or it is never retried.
+		/// A failure in a non-upload format only counts when nothing converted at all.
+		/// </summary>
+		private static bool ShouldRetryConversion(IEnumerable<ConvertStatus> statuses)
+		{
+			var failures = statuses.Where(s => s.Result == ConversionResult.Failed).ToList();
+			return failures.Any(s => s.IsUploadFormat)
+				|| (failures.Count > 0 && statuses.All(s => s.Result != ConversionResult.Success));
 		}
 
 		private const int SyncDelayMinutes = 30;

@@ -101,6 +101,14 @@ namespace UnitTests.Garmin
 			Assert.DoesNotThrow(() => GarminUploader.ValidateConfig(config));
 		}
 
+		[TestCase("/app/working/upload/123_My_Ride.fit", ExpectedResult = ".fit")]
+		[TestCase("/app/working/upload/123_My_Ride.tcx", ExpectedResult = ".tcx")]
+		[TestCase("/app/working/upload/123_My_Ride.TCX", ExpectedResult = ".tcx")]
+		public string GetUploadFormat_ShouldUseFileExtension(string filePath)
+		{
+			return GarminUploader.GetUploadFormat(filePath);
+		}
+
 		[Test]
 		public void Constructor_ShouldInitializeCorrectly()
 		{

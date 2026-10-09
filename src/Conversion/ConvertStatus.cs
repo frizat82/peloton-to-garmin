@@ -4,6 +4,11 @@
 	{
 		public ConversionResult Result { get; set; }
 		public string ErrorMessage { get; set; }
+
+		/// <summary>
+		/// True when this converter produces the file that gets uploaded to Garmin.
+		/// </summary>
+		public bool IsUploadFormat { get; set; }
 	}
 
 	public enum ConversionResult

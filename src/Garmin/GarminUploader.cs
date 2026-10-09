@@ -94,7 +94,7 @@ namespace Garmin
 				try
 				{
 					_logger.Information("Uploading to Garmin: {@file}", file);
-					await _api.UploadActivity(file, settings.Format.Fit ? ".fit" : ".tcx", auth);
+					await _api.UploadActivity(file, GetUploadFormat(file), auth);
 					await RateLimit();
 				}
 				catch (Exception e)
@@ -102,6 +102,16 @@ namespace Garmin
 					throw new GarminUploadException($"NativeImplV1 failed to upload workout {file}, {e.Message}", -1, e);
 				}
 			}
+		}
+
+		/// <summary>
+		/// The Garmin upload endpoint needs the format of the file being sent. Derive it from the
+		/// file itself rather than from the Format settings, since FIT may be enabled for local
+		/// backups while TCX is the format chosen for upload.
+		/// </summary>
+		public static string GetUploadFormat(string filePath)
+		{
+			return Path.GetExtension(filePath).ToLowerInvariant();
 		}
 
 		private async Task RateLimit()
