@@ -97,7 +97,7 @@ public class GarminDb : DbBase<P2GGarminData>, IGarminDb
 		{
 			_db.TryGetItem<P2GGarminData>(userId, out var data);
 
-			if (string.IsNullOrWhiteSpace(data?.OAuth1Token)) return Task.FromResult((OAuth2Token)null);
+			if (string.IsNullOrWhiteSpace(data?.OAuth2Token)) return Task.FromResult((OAuth2Token)null);
 
 			var decrytedTokenString = data.OAuth2Token.Decrypt();
 			var token = _fileHandler.DeserializeJson<OAuth2Token>(decrytedTokenString);

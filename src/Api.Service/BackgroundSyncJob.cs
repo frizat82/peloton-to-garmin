@@ -46,47 +46,81 @@ public class BackgroundSyncJob : BackgroundService
 		_httpClientFactory = httpClientFactory;
 	}
 
-	protected override Task ExecuteAsync(CancellationToken stoppingToken)
+	/// <summary>
+	/// How often the loop re-checks settings while idle. Settable for tests.
+	/// </summary>
+	public TimeSpan StepInterval { get; init; } = TimeSpan.FromSeconds(5);
+
+	private static readonly int DefaultPollingIntervalSeconds = new App().PollingIntervalSeconds;
+
+	protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 	{
 		Health.Set(HealthStatus.Healthy);
-		return RunAsync(stoppingToken);
-	}
 
-	private async Task RunAsync(CancellationToken stoppingToken)
-	{
-		_config = await _settingsService.GetSettingsAsync();
-
-		SyncServiceState.Enabled = _config.App.EnablePolling;
-		SyncServiceState.PollingIntervalSeconds = _config.App.PollingIntervalSeconds;
+		// Yield so host startup is never blocked by the first loop iteration.
+		await Task.Yield();
 
 		while (!stoppingToken.IsCancellationRequested)
 		{
-			int stepIntervalSeconds = 5;
-
-			if (await PollingDisabled())
+			try
 			{
-				Thread.Sleep(stepIntervalSeconds * 1000);
-				continue;
+				await RunIterationAsync(stoppingToken);
 			}
-
-			if (await NeedToWaitForMFAToBeCompletedAsync())
+			catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
 			{
-				_logger.Information("Can't start background syncing until MFA flow is completed for the first time.");
-				Thread.Sleep(stepIntervalSeconds * 1000);
-				continue;
+				break;
 			}
-
-			await SyncAsync();
-
-			_logger.Information("Sleeping for {@Seconds} seconds...", SyncServiceState.PollingIntervalSeconds);
-
-			for (int i = 1; i < SyncServiceState.PollingIntervalSeconds; i += stepIntervalSeconds)
+			catch (Exception e)
 			{
-				Thread.Sleep(stepIntervalSeconds * 1000);
-				if (await StateChangedAsync()) break;
+				// An unhandled exception here would stop the whole API host, so log it and keep polling.
+				_logger.Error(e, "Background sync loop failed, will retry.");
+				await Task.Delay(StepInterval, stoppingToken);
 			}
 		}
 	}
+
+	private async Task RunIterationAsync(CancellationToken stoppingToken)
+	{
+		if (await PollingDisabled())
+		{
+			await Task.Delay(StepInterval, stoppingToken);
+			return;
+		}
+
+		if (await NeedToWaitForMFAToBeCompletedAsync())
+		{
+			_logger.Information("Can't start background syncing until MFA flow is completed for the first time.");
+			await Task.Delay(StepInterval, stoppingToken);
+			return;
+		}
+
+		await SyncAsync();
+		await WaitForNextSyncAsync(stoppingToken);
+	}
+
+	private async Task WaitForNextSyncAsync(CancellationToken stoppingToken)
+	{
+		var intervalSeconds = SyncServiceState.PollingIntervalSeconds;
+		if (intervalSeconds != _config.App.PollingIntervalSeconds)
+			_logger.Warning("PollingIntervalSeconds is {Interval}, which is invalid. Using the default of {Default} seconds.", _config.App.PollingIntervalSeconds, intervalSeconds);
+
+		_logger.Information("Sleeping for {@Seconds} seconds...", intervalSeconds);
+
+		for (var waited = TimeSpan.Zero; waited.TotalSeconds < intervalSeconds; waited += StepInterval)
+		{
+			await Task.Delay(StepInterval, stoppingToken);
+
+			try
+			{
+				if (await StateChangedAsync()) break;
+			}
+			catch (Exception e)
+			{
+				_logger.Warning(e, "Failed to check for settings changes, will keep waiting.");
+			}
+		}
+	}
+
 
 	private async Task<bool> StateChangedAsync()
 	{
@@ -94,7 +128,10 @@ public class BackgroundSyncJob : BackgroundService
 
 		_config = await _settingsService.GetSettingsAsync();
 		SyncServiceState.Enabled = _config.App.EnablePolling;
-		SyncServiceState.PollingIntervalSeconds = _config.App.PollingIntervalSeconds;
+		// A non-positive interval (e.g. from a config file or env var) would sync back-to-back, so fall back to the default.
+		SyncServiceState.PollingIntervalSeconds = _config.App.PollingIntervalSeconds > 0
+			? _config.App.PollingIntervalSeconds
+			: DefaultPollingIntervalSeconds;
 
 		return _previousPollingState != SyncServiceState.Enabled;
 	}
@@ -120,7 +157,7 @@ public class BackgroundSyncJob : BackgroundService
 
 	private async Task<bool> NeedToWaitForMFAToBeCompletedAsync()
 	{
-		_config = await _settingsService.GetSettingsAsync();
+		// _config was just refreshed by PollingDisabled.
 		if (_config.Garmin.TwoStepVerificationEnabled)
 		{
 			var alreadyHaveToken = await _garminAuthService.GarminAuthTokenExistsAndIsValidAsync();
@@ -165,21 +202,29 @@ public class BackgroundSyncJob : BackgroundService
 		catch (Exception e)
 		{
 			_logger.Error(e, "Uncaught Exception.");
+			Health.Set(HealthStatus.UnHealthy);
 			await notifier.SendFailureAsync(e.Message);
 		}
 		finally
 		{
 			var now = DateTime.UtcNow;
-			var nextRunTime = now.AddSeconds(_config.App.PollingIntervalSeconds);
-
-			var syncStatus = await _syncStatusDb.GetSyncStatusAsync();
-			syncStatus.NextSyncTime = nextRunTime;
-			syncStatus.SyncStatus = Health.Value == HealthStatus.UnHealthy ? Status.UnHealthy :
-									Status.Running;
-
-			await _syncStatusDb.UpsertSyncStatusAsync(syncStatus);
-
+			var nextRunTime = now.AddSeconds(SyncServiceState.PollingIntervalSeconds);
 			NextSyncTime.Set(new DateTimeOffset(nextRunTime).ToUnixTimeSeconds());
+
+			try
+			{
+				var syncStatus = await _syncStatusDb.GetSyncStatusAsync();
+				syncStatus.NextSyncTime = nextRunTime;
+				syncStatus.SyncStatus = Health.Value == HealthStatus.UnHealthy ? Status.UnHealthy :
+										Status.Running;
+
+				await _syncStatusDb.UpsertSyncStatusAsync(syncStatus);
+			}
+			catch (Exception e)
+			{
+				// Swallow so the caller still waits out the polling interval instead of re-syncing immediately.
+				_logger.Error(e, "Failed to save sync status.");
+			}
 		}
 	}
 }
