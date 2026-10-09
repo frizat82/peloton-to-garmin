@@ -13,6 +13,7 @@ public interface IApiClient
 	Task<Format> SettingsFormatPostAsync(Format formatSettings);
 	Task<SettingsPelotonGetResponse> SettingsPelotonPostAsync(SettingsPelotonPostRequest pelotonSettings);
 	Task<SettingsGarminGetResponse> SettingsGarminPostAsync(SettingsGarminPostRequest garminSettings);
+	Task<SettingsNotificationsGetResponse> SettingsNotificationsPostAsync(SettingsNotificationsPostRequest notificationSettings);
 
 	Task<SyncGetResponse> SyncGetAsync();
 	Task<SyncPostResponse> SyncPostAsync(SyncPostRequest syncPostRequest);

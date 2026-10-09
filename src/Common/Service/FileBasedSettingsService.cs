@@ -7,6 +7,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Common.Service
@@ -44,6 +45,9 @@ namespace Common.Service
 
 			return _next.GetPelotonApiAuthentication(pelotonEmail);
 		}
+
+		// Every setting already comes from configuration here; there is no WebUI to override.
+		public IReadOnlyCollection<string> GetEnvironmentOverrides() => Array.Empty<string>();
 
 		public Task<Settings> GetSettingsAsync()
 		{

@@ -5,6 +5,13 @@
 
 <DeviceInfoModal @ref="_deviceInfoModal" />
 
+@if (otherEnvironmentOverrides.Any())
+{
+	<HxAlert Color="ThemeColor.Info">
+		These settings are set by <code>@(Constants.EnvironmentVariablePrefix)_FORMAT__*</code> environment variables, so changes to them here won't be saved: @string.Join(", ", otherEnvironmentOverrides)
+	</HxAlert>
+}
+
 <EditForm Model="@formatSettings">
 	<div class="row g-3">
 		<div class="col-md-12">
@@ -209,7 +216,10 @@
 							</HeaderTemplate>
 							<BodyTemplate>
 								<HxSwitch Text="Include Time In HR Zones" @bind-Value="formatSettings.IncludeTimeInHRZones" />
-								<HxSwitch Text="Include Time in Power Zones" @bind-Value="formatSettings.IncludeTimeInPowerZones" />
+								<HxFormState Enabled="@(!powerZonesFromEnvironment)">
+									<HxSwitch Text="Include Time in Power Zones" @bind-Value="formatSettings.IncludeTimeInPowerZones"
+											  Hint="@(powerZonesFromEnvironment ? SettingsGetResponse.EnvironmentHint(nameof(Settings.Format), nameof(Format.IncludeTimeInPowerZones)) : null)" />
+								</HxFormState>
 							</BodyTemplate>
 						</HxCard>
 						<br />
@@ -234,6 +244,8 @@
 	private static ICollection<PreferredLapType> lapTypes = Enum.GetValues(typeof(PreferredLapType)).Cast<PreferredLapType>().ToList();
 
 	private Format formatSettings;
+	private bool powerZonesFromEnvironment;
+	private ICollection<string> otherEnvironmentOverrides = new List<string>();
 	private DeviceInfoModal? _deviceInfoModal;
 	private HxGrid<KeyValuePair<WorkoutType, GarminDeviceInfo>> _gridComponent = new();
 
@@ -267,6 +279,10 @@
 
 		var settings = await _apiClient.SettingsGetAsync();
 		formatSettings = settings.Format;
+		powerZonesFromEnvironment = settings.IsSetByEnvironment(nameof(Settings.Format), nameof(Format.IncludeTimeInPowerZones));
+		otherEnvironmentOverrides = settings.EnvironmentOverridesIn(nameof(Settings.Format))
+			.Where(p => p != nameof(Format.IncludeTimeInPowerZones))
+			.ToList();
 		TitleTemplate_ValueChanged(formatSettings!.WorkoutTitleTemplate);
 
 		var systemInfo = await _apiClient.SystemInfoGetAsync(new SystemInfoGetRequest() { CheckForUpdate = settings.App.CheckForUpdates });

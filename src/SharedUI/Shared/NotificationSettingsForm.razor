@@ -1,0 +1,97 @@
+@inject IApiClient _apiClient
+@inject IHxMessengerService _toaster;
+
+<EditForm Model="@request">
+	<HxCard>
+		<HeaderTemplate>Discord</HeaderTemplate>
+		<BodyTemplate>
+			<p>P2G posts to a Discord channel when a sync fails, and optionally when it succeeds.</p>
+			<HxFormState Enabled="@(!webhookFromEnvironment)">
+				<HxInputText @bind-Value="request.DiscordWebhookUrl" Type="InputType.Password"
+							 Placeholder="@(notificationSettings.IsDiscordWebhookUrlSet ? "Leave blank to keep the current webhook" : "https://discord.com/api/webhooks/...")"
+							 Hint="@(webhookFromEnvironment ? SettingsGetResponse.EnvironmentHint(nameof(Settings.Notifications), nameof(NotificationSettings.DiscordWebhookUrl)) : "In Discord: channel settings > Integrations > Webhooks > Copy Webhook URL.")">
+					<LabelTemplate>
+						Webhook URL
+						@if (notificationSettings.IsDiscordWebhookUrlSet)
+						{
+							<HxBadge Type="BadgeType.RoundedPill" Color="ThemeColor.Success">Webhook is set</HxBadge>
+						}
+					</LabelTemplate>
+					<InputGroupEndTemplate>
+						@if (notificationSettings.IsDiscordWebhookUrlSet && !webhookFromEnvironment)
+						{
+							<HxButton Text="Remove" Color="ThemeColor.Secondary" Outline="true" OnClick="RemoveWebhook" />
+						}
+					</InputGroupEndTemplate>
+				</HxInputText>
+			</HxFormState>
+			<br />
+			<HxFormState Enabled="@(!notifyOnSuccessFromEnvironment)">
+				<HxSwitch Text="Also notify when a sync succeeds" @bind-Value="request.NotifyOnSuccess"
+						  Hint="@(notifyOnSuccessFromEnvironment ? SettingsGetResponse.EnvironmentHint(nameof(Settings.Notifications), nameof(NotificationSettings.NotifyOnSuccess)) : null)" />
+			</HxFormState>
+		</BodyTemplate>
+	</HxCard>
+	<br />
+	<HxSubmit Color="ThemeColor.Primary" OnClick="SaveNotificationSettings" Enabled="@(!webhookFromEnvironment || !notifyOnSuccessFromEnvironment)">Save</HxSubmit>
+</EditForm>
+
+@code {
+	private SettingsNotificationsGetResponse notificationSettings = new();
+	private SettingsNotificationsPostRequest request = new();
+	private bool webhookFromEnvironment;
+	private bool notifyOnSuccessFromEnvironment;
+
+	protected override Task OnInitializedAsync()
+	{
+		using var tracing = Tracing.ClientTrace($"{nameof(NotificationSettingsForm)}.{nameof(OnInitializedAsync)}", kind: ActivityKind.Client);
+		return LoadDataAsync();
+	}
+
+	private async Task LoadDataAsync()
+	{
+		using var tracing = Tracing.ClientTrace($"{nameof(NotificationSettingsForm)}.{nameof(LoadDataAsync)}", kind: ActivityKind.Client);
+		var settings = await _apiClient.SettingsGetAsync();
+
+		webhookFromEnvironment = settings.IsSetByEnvironment(nameof(Settings.Notifications), nameof(NotificationSettings.DiscordWebhookUrl));
+		notifyOnSuccessFromEnvironment = settings.IsSetByEnvironment(nameof(Settings.Notifications), nameof(NotificationSettings.NotifyOnSuccess));
+		Show(settings.Notifications);
+	}
+
+	private void Show(SettingsNotificationsGetResponse settings)
+	{
+		notificationSettings = settings;
+		request = new SettingsNotificationsPostRequest { NotifyOnSuccess = settings.NotifyOnSuccess };
+	}
+
+	// Removing saves straight away, so the page never shows the webhook as removed while it is still stored.
+	protected async Task RemoveWebhook()
+	{
+		request.DiscordWebhookUrl = null;
+		request.RemoveDiscordWebhookUrl = true;
+		await SaveNotificationSettings();
+		request.RemoveDiscordWebhookUrl = false;
+	}
+
+	protected async Task SaveNotificationSettings()
+	{
+		using var tracing = Tracing.ClientTrace($"{nameof(NotificationSettingsForm)}.{nameof(SaveNotificationSettings)}", kind: ActivityKind.Client);
+
+		_toaster.Clear();
+
+		try
+		{
+			Show(await _apiClient.SettingsNotificationsPostAsync(request));
+			_toaster.AddInformation("Notification Settings Saved!");
+		}
+		catch (ApiClientException e)
+		{
+			_toaster.AddError(e.Message);
+		}
+		catch (Exception e)
+		{
+			_toaster.AddError($"Failed to save Notification Settings - {e.Message} - See logs for details.");
+			Log.Error("UI - Failed to save Notification settings.", e);
+		}
+	}
+}

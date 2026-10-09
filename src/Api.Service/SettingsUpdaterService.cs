@@ -12,6 +12,7 @@ public interface ISettingsUpdaterService
 	Task<ServiceResult<SettingsPelotonGetResponse>> UpdatePelotonSettingsAsync(SettingsPelotonPostRequest updatedPelotonSettings);
 	Task<ServiceResult<Format>> UpdateFormatSettingsAsync(Format updatedFormatSettings);
 	Task<ServiceResult<SettingsGarminGetResponse>> UpdateGarminSettingsAsync(SettingsGarminPostRequest updatedGarminSettings);
+	Task<ServiceResult<SettingsNotificationsGetResponse>> UpdateNotificationSettingsAsync(SettingsNotificationsPostRequest updatedNotificationSettings);
 }
 public class SettingsUpdaterService : ISettingsUpdaterService
 {
@@ -138,5 +139,47 @@ public class SettingsUpdaterService : ISettingsUpdaterService
 
 		result.Result = new SettingsGetResponse(updatedSettings).Peloton;
 		return result;
+	}
+
+	public async Task<ServiceResult<SettingsNotificationsGetResponse>> UpdateNotificationSettingsAsync(SettingsNotificationsPostRequest updatedNotificationSettings)
+	{
+		var result = new ServiceResult<SettingsNotificationsGetResponse>();
+
+		if (updatedNotificationSettings is null)
+		{
+			result.Successful = false;
+			result.Error = new ServiceError() { Message = "Updated Notification Settings must not be null or empty." };
+			return result;
+		}
+
+		var webhookUrl = updatedNotificationSettings.DiscordWebhookUrl?.Trim();
+		if (!string.IsNullOrEmpty(webhookUrl) && !IsDiscordWebhookUrl(webhookUrl))
+		{
+			result.Successful = false;
+			result.Error = new ServiceError() { Message = "Discord webhook URL must look like https://discord.com/api/webhooks/..." };
+			return result;
+		}
+
+		var settings = await _settingsService.GetSettingsAsync();
+		if (updatedNotificationSettings.RemoveDiscordWebhookUrl)
+			settings.Notifications.DiscordWebhookUrl = null;
+		else if (!string.IsNullOrEmpty(webhookUrl))
+			settings.Notifications.DiscordWebhookUrl = webhookUrl;
+		settings.Notifications.NotifyOnSuccess = updatedNotificationSettings.NotifyOnSuccess;
+
+		await _settingsService.UpdateSettingsAsync(settings);
+		var updatedSettings = await _settingsService.GetSettingsAsync();
+
+		result.Result = new SettingsGetResponse(updatedSettings).Notifications;
+		return result;
+	}
+
+	private static bool IsDiscordWebhookUrl(string url)
+	{
+		return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+			&& uri.Scheme == Uri.UriSchemeHttps
+			&& new[] { "discord.com", "discordapp.com" }.Any(domain =>
+				uri.Host.Equals(domain, StringComparison.OrdinalIgnoreCase) || uri.Host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
+			&& uri.AbsolutePath.StartsWith("/api/webhooks/", StringComparison.OrdinalIgnoreCase);
 	}
 }
