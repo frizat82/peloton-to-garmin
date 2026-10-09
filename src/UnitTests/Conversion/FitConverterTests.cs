@@ -114,10 +114,7 @@ namespace UnitTests.Conversion
 			{
 				using (FileStream fitDest = new FileStream(dest, FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
 				{
-					var validator = new Encode(ProtocolVersion.V20);
-					validator.Open(fitDest);
-					validator.Write(convertedMesgs); // validates while writing
-					validator.Close();
+					FitWriter.Write(fitDest, convertedMesgs); // validates while writing
 				}
 			}
 			finally

@@ -33,18 +33,7 @@ namespace Conversion
 			if (data is null) return;
 
 			using (FileStream fitDest = new FileStream(path, FileMode.Create, FileAccess.ReadWrite, FileShare.Read))
-			{
-				Encode encoder = new Encode(ProtocolVersion.V20);
-				try
-				{
-					encoder.Open(fitDest);
-					encoder.Write(data.Item2);
-				}
-				finally
-				{
-					encoder.Close();
-				}
-			}
+				FitWriter.Write(fitDest, data.Item2);
 		}
 
 		protected override async Task<Tuple<string, ICollection<Mesg>>> ConvertInternalAsync(P2GWorkout workoutData, Settings settings)

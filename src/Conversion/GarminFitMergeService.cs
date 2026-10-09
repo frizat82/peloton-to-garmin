@@ -32,6 +32,9 @@ public static class GarminFitMergeService
 	{
 		using var tracing = Tracing.Trace($"{nameof(GarminFitMergeService)}.{nameof(MergeWatchFitWithPeloton)}");
 
+		if (FitWriter.IsSdkProfileCorrupted())
+			_logger.Error("FIT merge: the FIT SDK's shared record definition has been corrupted by an earlier FIT write in this process; cadence, power and resistance will be missing from this merge. Restart P2G and report this as a bug.");
+
 		var allMessages = DecodeAllMessages(watchFitBytes);
 
 		var pelotonSampleMap = BuildPelotonSampleMap(pelotonSamples, workoutStartUnix);
@@ -416,17 +419,7 @@ public static class GarminFitMergeService
 	private static byte[] EncodeMessages(List<Mesg> messages)
 	{
 		using var stream = new MemoryStream();
-		var encoder = new Encode(ProtocolVersion.V20);
-		try
-		{
-			encoder.Open(stream);
-			encoder.Write(messages);
-		}
-		finally
-		{
-			encoder.Close();
-		}
-
+		FitWriter.Write(stream, messages);
 		return stream.ToArray();
 	}
 

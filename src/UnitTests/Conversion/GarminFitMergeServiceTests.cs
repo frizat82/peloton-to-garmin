@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnitTests.UnitTestHelpers;
 
 namespace UnitTests.Conversion;
 
@@ -21,10 +22,7 @@ public class GarminFitMergeServiceTests
 	private static byte[] BuildFitBytes(IEnumerable<Mesg> messages)
 	{
 		using var ms = new MemoryStream();
-		var enc = new Encode(ProtocolVersion.V20);
-		enc.Open(ms);
-		enc.Write(messages.ToList());
-		enc.Close();
+		FitWriter.Write(ms, messages);
 		return ms.ToArray();
 	}
 
@@ -46,7 +44,7 @@ public class GarminFitMergeServiceTests
 		return fields;
 	}
 
-	private static byte[] BuildMinimalFit(Sport sport, bool includeSpeed, bool includePower, bool includeCadence)
+	private static byte[] BuildMinimalFit(Sport sport, bool includeSpeed, bool includePower, bool includeCadence, byte cadence = 80)
 	{
 		var startTime = new Dynastream.Fit.DateTime(System.DateTime.UtcNow.AddMinutes(-20));
 		var ts = new Dynastream.Fit.DateTime(startTime);
@@ -59,7 +57,7 @@ public class GarminFitMergeServiceTests
 			rec.SetHeartRate(140);
 			if (includeSpeed) rec.SetEnhancedSpeed(2.5f);
 			if (includePower) rec.SetPower(150);
-			if (includeCadence) rec.SetCadence(80);
+			if (includeCadence) rec.SetCadence(cadence);
 			messages.Add(rec);
 			ts.Add(1);
 		}
@@ -106,7 +104,38 @@ public class GarminFitMergeServiceTests
 		};
 	}
 
+	private static (int Cadence, int Power) CountBikeRecords(byte[] fitBytes)
+	{
+		var records = FitTestHelper.DecodeRecords(fitBytes);
+		return (records.Count(r => r.GetCadence() is byte c && c != byte.MaxValue),
+				records.Count(r => r.GetPower() is ushort p && p != ushort.MaxValue));
+	}
+
 	// ── Tests ─────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Regression: only part of the watch recording overlaps the Peloton class, so the merged file mixes records
+	/// with and without cadence. Writing that used to leave invalid values in the FIT SDK's shared Profile, and
+	/// every later merge in the same process then wrote no cadence or power at all.
+	/// </summary>
+	[Test]
+	public void Merge_RepeatedInOneProcess_KeepsInjectingCadenceAndPower()
+	{
+		var fitBytes = BuildMinimalFit(Sport.Cycling, includeSpeed: false, includePower: false, includeCadence: false);
+		var samples = BuildSamples();
+		samples.Seconds_Since_Pedaling_Start = samples.Seconds_Since_Pedaling_Start.Take(30).ToArray();
+		var firstRecordUnix = DateTimeOffset.UtcNow.AddMinutes(-20).ToUnixTimeSeconds();
+
+		var first = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples, firstRecordUnix);
+		var second = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, samples, firstRecordUnix);
+
+		var firstCounts = CountBikeRecords(first);
+		var secondCounts = CountBikeRecords(second);
+		firstCounts.Cadence.Should().BeGreaterThan(0);
+		secondCounts.Should().Be(firstCounts);
+		secondCounts.Cadence.Should().BeLessThan(60, because: "records outside the class must stay without cadence for this test to cover mixed layouts");
+		FitWriter.IsSdkProfileCorrupted().Should().BeFalse();
+	}
 
 	[Test]
 	public void Merge_Strength_NoNewSessionFields()
@@ -138,10 +167,11 @@ public class GarminFitMergeServiceTests
 	}
 
 	[Test]
-	public void Merge_Rowing_StrokeRateCadence_InjectedWhenWatchHasNone()
+	public void Merge_Rowing_StrokeRateCadence_InjectedWhenWatchCadenceIsZero()
 	{
-		// Watch has no cadence values — Peloton stroke_rate (80 spm) should fill the zeros
-		var fitBytes = BuildMinimalFit(Sport.Rowing, includeSpeed: false, includePower: false, includeCadence: false);
+		// Watch declares cadence but recorded only zeros — Peloton stroke_rate (80 spm) should fill them.
+		// (Rowing only writes fields the watch declared; indoor rowing recordings declare cadence.)
+		var fitBytes = BuildMinimalFit(Sport.Rowing, includeSpeed: false, includePower: false, includeCadence: true, cadence: 0);
 		var samples = BuildSamples(cadenceSlug: "stroke_rate", speedKph: null, powerWatts: 180);
 		var workoutStart = DateTimeOffset.UtcNow.AddMinutes(-21).ToUnixTimeSeconds();
 
