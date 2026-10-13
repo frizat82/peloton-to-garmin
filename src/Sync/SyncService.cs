@@ -36,18 +36,20 @@ namespace Sync
 		private readonly IPelotonService _pelotonService;
 		private readonly IGarminUploader _garminUploader;
 		private readonly IGarminActivityEnrichmentService _enrichmentService;
+		private readonly IGarminFtpSyncService _ftpSyncService;
 		private readonly IEnumerable<IConverter> _converters;
 		private readonly ISyncStatusDb _db;
 		private readonly ISyncedWorkoutsDb _syncedWorkoutsDb;
 		private readonly IFileHandling _fileHandler;
 		private readonly ISettingsService _settingsService;
 
-		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IGarminActivityEnrichmentService enrichmentService, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, ISyncedWorkoutsDb syncedWorkoutsDb, IFileHandling fileHandler)
+		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IGarminActivityEnrichmentService enrichmentService, IGarminFtpSyncService ftpSyncService, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, ISyncedWorkoutsDb syncedWorkoutsDb, IFileHandling fileHandler)
 		{
 			_settingsService = settingService;
 			_pelotonService = pelotonService;
 			_garminUploader = garminUploader;
 			_enrichmentService = enrichmentService;
+			_ftpSyncService = ftpSyncService;
 			_converters = converters;
 			_syncedWorkoutsDb = syncedWorkoutsDb;
 			_db = dbClient;
@@ -224,6 +226,15 @@ namespace Sync
 			catch (Exception e)
 			{
 				_logger.Warning(e, "Failed to enrich Garmin activities. Proceeding with normal upload. {Message}", e.Message);
+			}
+
+			try
+			{
+				await _ftpSyncService.SyncCyclingFtpAsync(userData);
+			}
+			catch (Exception e)
+			{
+				_logger.Warning(e, "Failed to sync cycling FTP to Garmin. {Message}", e.Message);
 			}
 
 			try

@@ -184,6 +184,8 @@ public class GarminSettings : ICredentials
 	public FileFormat FormatToUpload { get; set; }
 	public bool EnrichGarminActivities { get; set; } = false;
 	public bool MergeFitWithWatch { get; set; } = false;
+	/// <summary>Keep Garmin's cycling FTP and power zones in line with the FTP Peloton has for the rider.</summary>
+	public bool SyncCyclingFtp { get; set; } = false;
 	public int ActivityMatchWindowSeconds { get; set; } = 900;
 	public GarminApiSettings Api { get; set; } = new GarminApiSettings();
 }
@@ -210,6 +212,7 @@ public class GarminApiSettings
 	public string ActivitySearchUrl { get; set; } = "https://connectapi.garmin.com/activitylist-service/activities/search/activities";
 	public string ActivityUpdateUrl { get; set; } = "https://connectapi.garmin.com/activity-service/activity";
 	public string ActivityDownloadUrl { get; set; } = "https://connectapi.garmin.com/download-service/files/activity";
+	public string PowerZonesUrl { get; set; } = "https://connectapi.garmin.com/biometric-service/powerZones/sports";
 }
 
 public enum FileFormat : byte
