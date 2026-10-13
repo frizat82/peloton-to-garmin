@@ -127,7 +127,7 @@ namespace Conversion
 
 			if (subSport == SubSport.StrengthTraining)
 			{
-				var sets = GetExerciseBasedSteps(workoutData.Exercises, startTime, settings);
+				var sets = ExerciseSets.Build(workoutData.Exercises, startTime, settings.Format.Strength.DefaultSecondsPerRep);
 
 				// Add sets in order
 				foreach (var set in sets)
@@ -516,70 +516,6 @@ namespace Conversion
 			}
 
 			return stepsAndLaps;
-		}
-
-		private ICollection<SetMesg> GetExerciseBasedSteps(ICollection<P2GExercise> exercises, Dynastream.Fit.DateTime startTime, Settings settings)
-		{
-			using var tracing = Tracing.Trace($"{nameof(FitConverter)}.{nameof(GetExerciseBasedSteps)}")
-										.WithTag(TagKey.Format, FileFormat.Fit.ToString());
-
-			var steps = new List<SetMesg>();
-
-			if (exercises is null || exercises.Count <= 0)
-				return steps;
-
-			ushort stepIndex = 0;
-			foreach (var p2gExercise in exercises)
-			{
-				var isRest = p2gExercise.Id.IsRest();
-				GarminExercise exercise = null;
-				if (!isRest)
-				{
-					if (ExerciseMapping.IgnoredPelotonExercises.Contains(p2gExercise.Id))
-						continue;
-
-					if (!ExerciseMapping.StrengthExerciseMappings.TryGetValue(p2gExercise.Id, out exercise))
-					{
-						_logger.Information($"Found Peloton Strength exercise with no Garmin mapping: {p2gExercise.Name} {p2gExercise.Id}");
-						continue;
-					}
-				}
-
-				var setMesg = new SetMesg();
-				var setStartTime = new Dynastream.Fit.DateTime(startTime);
-				setStartTime.Add(p2gExercise.StartOffsetSeconds);
-				setMesg.SetStartTime(setStartTime);
-				setMesg.SetDuration(p2gExercise.DurationSeconds);
-
-				if (!isRest)
-				{
-					setMesg.SetCategory(0, exercise.ExerciseCategory);
-					setMesg.SetCategorySubtype(0, exercise.ExerciseName);
-				}
-
-				setMesg.SetMessageIndex(stepIndex);
-				setMesg.SetSetType(isRest ? SetType.Rest : SetType.Active);
-				setMesg.SetWktStepIndex(stepIndex);
-
-				var reps = p2gExercise.Reps;
-				if (p2gExercise.Type == MovementTargetType.Time)
-				{
-					if (reps is null || reps <= 0)
-						reps = p2gExercise.DurationSeconds / settings.Format.Strength.DefaultSecondsPerRep;
-				}
-
-				setMesg.SetRepetitions((ushort)reps);
-
-				if (p2gExercise.Weight is object)
-				{
-					setMesg.SetWeight(ConvertWeightToKilograms(p2gExercise.Weight.Value, p2gExercise.Weight.Unit));
-				}
-
-				stepIndex++;
-				steps.Add(setMesg);
-			}
-
-			return steps;
 		}
 
 		public ICollection<LapMesg> GetLaps(PreferredLapType preferredLapType, WorkoutSamples workoutSamples, Dynastream.Fit.DateTime startTime, Sport sport, SubSport subSport)

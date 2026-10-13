@@ -28,7 +28,10 @@ public static class GarminFitMergeService
 	/// <param name="workoutStartUnix">Workout start time as Unix epoch seconds (from Workout.Start_Time).</param>
 	/// <param name="workout">Peloton workout metadata (used for power zone injection when enabled).</param>
 	/// <param name="includeTimeInPowerZones">When true and the workout is cycling, injects SetTimeInPowerZone(1-7) into the merged session.</param>
-	public static byte[] MergeWatchFitWithPeloton(byte[] watchFitBytes, WorkoutSamples pelotonSamples, long workoutStartUnix, Workout workout = null, bool includeTimeInPowerZones = false)
+	/// <param name="exercises">The Peloton class's exercise list. When any map to Garmin exercises, they replace the watch's exercise sets.</param>
+	/// <param name="defaultSecondsPerRep">Used to estimate reps for timed exercises; 0 uses the settings default.</param>
+	public static byte[] MergeWatchFitWithPeloton(byte[] watchFitBytes, WorkoutSamples pelotonSamples, long workoutStartUnix, Workout workout = null, bool includeTimeInPowerZones = false,
+		ICollection<P2GExercise> exercises = null, int defaultSecondsPerRep = 0)
 	{
 		using var tracing = Tracing.Trace($"{nameof(GarminFitMergeService)}.{nameof(MergeWatchFitWithPeloton)}");
 
@@ -54,10 +57,9 @@ public static class GarminFitMergeService
 		// Cycling watches without a cadence/power sensor won't declare those fields,
 		// but Garmin accepts new field definitions in cycling FITs. Always inject for cycling.
 		// Rowing/strength keep the supplement-only guard to prevent 415 rejections.
-		var sessionSport = allMessages
-			.Where(m => m.Num == MesgNum.Session)
-			.Select(m => (Sport?)new SessionMesg(m).GetSport())
-			.FirstOrDefault();
+		var sessionMesg = allMessages.FirstOrDefault(m => m.Num == MesgNum.Session) is { } s ? new SessionMesg(s) : null;
+		var sessionSport = sessionMesg?.GetSport();
+		var sessionSubSport = sessionMesg?.GetSubSport();
 		var isCycling = sessionSport == Sport.Cycling;
 		_logger.Information("FIT merge: sport={Sport} isCycling={IsCycling}", sessionSport, isCycling);
 
@@ -65,6 +67,9 @@ public static class GarminFitMergeService
 
 		if (includeTimeInPowerZones && isCycling && workout is not null)
 			InjectPowerZones(mergedMessages, workout, pelotonSamples);
+
+		if (sessionSubSport == SubSport.StrengthTraining)
+			InjectExerciseSets(mergedMessages, exercises, workoutStartUnix, defaultSecondsPerRep);
 
 		return EncodeMessages(mergedMessages);
 	}
@@ -412,6 +417,31 @@ public static class GarminFitMergeService
 				ftpMaybe, z1, z2, z3, z4, z5, z6, z7);
 			break;
 		}
+	}
+
+	// ─── Exercise sets ───────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Replaces the watch's exercise sets with the Peloton class's exercises so Garmin
+	/// lists the class's lifts and builds its muscle map from them. The watch's own sets
+	/// come from rep detection and rarely match the class. Without any mappable Peloton
+	/// exercises, the watch's sets are left alone. Only strength activities get sets.
+	/// </summary>
+	private static void InjectExerciseSets(List<Mesg> messages, ICollection<P2GExercise> exercises, long workoutStartUnix, int defaultSecondsPerRep)
+	{
+		var startTime = new Dynastream.Fit.DateTime(DateTimeOffset.FromUnixTimeSeconds(workoutStartUnix).UtcDateTime);
+		var sets = ExerciseSets.Build(exercises, startTime, defaultSecondsPerRep);
+		if (!sets.Any(s => s.GetSetType() == SetType.Active)) return;
+
+		var insertAt = messages.FindIndex(m => m.Num == MesgNum.Set);
+		var watchSets = messages.RemoveAll(m => m.Num == MesgNum.Set);
+		if (insertAt < 0)
+			insertAt = messages.FindIndex(m => m.Num is MesgNum.Session or MesgNum.Activity);
+		if (insertAt < 0)
+			insertAt = messages.Count;
+
+		messages.InsertRange(insertAt, sets);
+		_logger.Information("FIT merge: replaced {WatchSets} watch exercise sets with {PelotonSets} Peloton class sets", watchSets, sets.Count);
 	}
 
 	// ─── Encode ──────────────────────────────────────────────────────────────
