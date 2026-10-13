@@ -15,4 +15,8 @@
     <ProjectReference Include="..\Conversion\Conversion.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="UnitTests" />
+  </ItemGroup>
+
 </Project>
