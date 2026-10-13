@@ -110,5 +110,49 @@ namespace UnitTests.Garmin
 
 			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
 		}
+
+		[Test]
+		public async Task NoUpdate_WhenGarminFtpOnlyDiffersByRounding()
+		{
+			var mocker = Setup(GarminZones(cyclingFtp: 149.0000001));
+
+			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+		}
+
+		[Test]
+		public async Task DoesNothing_WhenNoUserData()
+		{
+			var mocker = Setup(GarminZones());
+
+			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(null);
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), Times.Never);
+		}
+
+		[TestCase(AuthStage.None)]
+		[TestCase(AuthStage.NeedMfaToken)]
+		public async Task DoesNothing_WhenNotSignedInToGarmin(AuthStage stage)
+		{
+			var mocker = Setup(GarminZones());
+			mocker.GetMock<IGarminAuthenticationService>().Setup(a => a.GetGarminAuthenticationAsync())
+				.ReturnsAsync(new GarminApiAuthentication { AuthStage = stage });
+
+			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), Times.Never);
+		}
+
+		[Test]
+		public void PowerZones_KeepFieldsP2GDoesNotKnow()
+		{
+			const string json = "{\"sport\":\"ROWING\",\"functionalThresholdPower\":160.0,\"zoneCalcBasis\":\"PERCENT_FTP\",\"userProfilePk\":42}";
+
+			var zones = System.Text.Json.JsonSerializer.Deserialize<GarminPowerZones>(json);
+			var roundTrip = System.Text.Json.JsonSerializer.Serialize(zones);
+
+			roundTrip.Should().Contain("\"zoneCalcBasis\":\"PERCENT_FTP\"").And.Contain("\"userProfilePk\":42");
+		}
 	}
 }

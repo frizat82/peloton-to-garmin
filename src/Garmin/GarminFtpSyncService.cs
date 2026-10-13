@@ -64,7 +64,7 @@ public class GarminFtpSyncService : IGarminFtpSyncService
 			return;
 		}
 
-		if (cycling.FunctionalThresholdPower == ftp)
+		if (Math.Round(cycling.FunctionalThresholdPower ?? 0) == ftp)
 			return;
 
 		_logger.Information("FTP sync: updating Garmin cycling FTP from {GarminFtp} to Peloton's {PelotonFtp}", cycling.FunctionalThresholdPower, ftp);

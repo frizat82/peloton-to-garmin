@@ -514,5 +514,23 @@ namespace UnitTests.Sync
 			// ASSERT
 			syncedDb.Verify(x => x.MarkSyncedAsync(It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { "1" }))), Times.Once);
 		}
+
+		[Test]
+		public async Task SyncAsync_SyncsFtp_EvenWithNoWorkouts_AndIgnoresFtpFailures()
+		{
+			var mocker = new AutoMocker();
+			var service = mocker.CreateInstance<SyncService>();
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(new Settings());
+			var userData = new UserData { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Workout_Source, Cycling_Workout_Ftp = 149 };
+			mocker.GetMock<IPelotonService>().Setup(p => p.GetUserDataAsync()).ReturnsAsync(userData);
+			mocker.GetMock<IPelotonService>().Setup(p => p.GetWorkoutDetailsAsync(It.IsAny<ICollection<Workout>>())).ReturnsAsync(new P2GWorkout[] { });
+			var ftp = mocker.GetMock<IGarminFtpSyncService>();
+			ftp.Setup(f => f.SyncCyclingFtpAsync(It.IsAny<UserData>())).ThrowsAsync(new Exception("Garmin down"));
+
+			var response = await service.SyncAsync(new List<string>());
+
+			response.SyncSuccess.Should().BeTrue();
+			ftp.Verify(f => f.SyncCyclingFtpAsync(userData), Times.Once);
+		}
 	}
 }
