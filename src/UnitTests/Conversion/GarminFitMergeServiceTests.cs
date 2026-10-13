@@ -1,3 +1,4 @@
+using Common.Dto;
 using Common.Dto.Peloton;
 using Conversion;
 using Dynastream.Fit;
@@ -368,6 +369,109 @@ public class GarminFitMergeServiceTests
 
 		GetFieldNums(merged, MesgNum.Session).Should().BeSubsetOf(beforeSession, "no new Session fields on real strength FIT");
 		GetFieldNums(merged, MesgNum.Record).Should().BeSubsetOf(beforeRecord, "no new RecordMesg fields on real strength FIT");
+	}
+
+	// ── Exercise Set Tests ────────────────────────────────────────────────
+
+	private const string ArnoldPressId = "01251235527748368069f9dc898aadf3";
+	private const string ArmCirclesId = "1b3400e0aade45e58d2f42cf19af0f40";
+	private const string RestId = "3ca251f6d68746ad91aebea5c89694ca";
+
+	private static byte[] BuildStrengthFitWithWatchSet(System.DateTime start)
+	{
+		var startTime = new Dynastream.Fit.DateTime(start);
+		var ts = new Dynastream.Fit.DateTime(startTime);
+		var messages = new List<Mesg>();
+		for (int i = 0; i < 120; i++)
+		{
+			var rec = new RecordMesg();
+			rec.SetTimestamp(new Dynastream.Fit.DateTime(ts));
+			rec.SetHeartRate(110);
+			messages.Add(rec);
+			ts.Add(1);
+		}
+
+		var watchSet = new SetMesg();
+		watchSet.SetTimestamp(new Dynastream.Fit.DateTime(ts));
+		watchSet.SetStartTime(startTime);
+		watchSet.SetDuration(30);
+		watchSet.SetSetType(SetType.Active);
+		watchSet.SetCategory(0, ExerciseCategory.PullUp);
+		watchSet.SetRepetitions(5);
+		messages.Add(watchSet);
+
+		var session = new SessionMesg();
+		session.SetTimestamp(ts);
+		session.SetStartTime(startTime);
+		session.SetSport(Sport.Training);
+		session.SetSubSport(SubSport.StrengthTraining);
+		session.SetTotalElapsedTime(120f);
+		messages.Add(session);
+
+		var activity = new ActivityMesg();
+		activity.SetTimestamp(ts);
+		activity.SetNumSessions(1);
+		messages.Add(activity);
+
+		return BuildFitBytes(messages);
+	}
+
+	private static List<SetMesg> DecodeSets(byte[] fitBytes)
+	{
+		var sets = new List<SetMesg>();
+		var decoder = new Decode();
+		var broadcaster = new MesgBroadcaster();
+		decoder.MesgEvent += broadcaster.OnMesg;
+		decoder.MesgDefinitionEvent += broadcaster.OnMesgDefinition;
+		broadcaster.SetMesgEvent += (_, e) => sets.Add((SetMesg)e.mesg);
+		decoder.Read(new MemoryStream(fitBytes));
+		return sets;
+	}
+
+	[Test]
+	public void ExerciseSets_ReplaceWatchSets_WithPelotonClassExercises()
+	{
+		var start = System.DateTime.UtcNow.AddMinutes(-30);
+		var fitBytes = BuildStrengthFitWithWatchSet(start);
+		var workoutStart = new DateTimeOffset(start).ToUnixTimeSeconds();
+		var exercises = new List<P2GExercise>
+		{
+			new() { Id = ArmCirclesId, Name = "Arm Circles", StartOffsetSeconds = 0, DurationSeconds = 30, Type = MovementTargetType.Time },
+			new() { Id = RestId, Name = "Rest", StartOffsetSeconds = 30, DurationSeconds = 15, Type = MovementTargetType.Time },
+			new() { Id = ArnoldPressId, Name = "Arnold Press", StartOffsetSeconds = 45, DurationSeconds = 40, Type = MovementTargetType.Reps, Reps = 10, Weight = new() { Value = 20, Unit = "lb" } },
+			new() { Id = "not-a-mapped-peloton-exercise", Name = "Mystery Move", StartOffsetSeconds = 85, DurationSeconds = 30, Type = MovementTargetType.Time },
+		};
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, BuildSamples(cadenceSlug: null, speedKph: null), workoutStart, exercises: exercises, defaultSecondsPerRep: 3);
+
+		var sets = DecodeSets(merged);
+		sets.Should().HaveCount(3, "the unmapped move is skipped and the watch's own set is replaced");
+		sets.Select(s => s.GetSetType()).Should().Equal(SetType.Active, SetType.Rest, SetType.Active);
+		sets[0].GetCategory(0).Should().Be(ExerciseCategory.WarmUp);
+		sets[0].GetRepetitions().Should().Be(10, "timed moves get duration / seconds-per-rep");
+		sets[2].GetCategory(0).Should().Be(ExerciseCategory.ShoulderPress);
+		sets[2].GetCategorySubtype(0).Should().Be(ShoulderPressExerciseName.ArnoldPress);
+		sets[2].GetRepetitions().Should().Be(10);
+		sets[2].GetWeight().Should().BeApproximately(9.07f, 0.01f);
+		sets[2].GetStartTime().GetTimeStamp().Should().Be(new Dynastream.Fit.DateTime(start).GetTimeStamp() + 45);
+		FitTestHelper.DecodeRecords(merged).Should().HaveCount(120, "the watch's recording is kept");
+	}
+
+	[Test]
+	public void ExerciseSets_KeepWatchSets_WhenNoPelotonExerciseMaps()
+	{
+		var start = System.DateTime.UtcNow.AddMinutes(-30);
+		var fitBytes = BuildStrengthFitWithWatchSet(start);
+		var exercises = new List<P2GExercise>
+		{
+			new() { Id = "not-a-mapped-peloton-exercise", Name = "Mystery Move", StartOffsetSeconds = 0, DurationSeconds = 30, Type = MovementTargetType.Time },
+		};
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, BuildSamples(cadenceSlug: null, speedKph: null), new DateTimeOffset(start).ToUnixTimeSeconds(), exercises: exercises);
+
+		var sets = DecodeSets(merged);
+		sets.Should().ContainSingle();
+		sets[0].GetCategory(0).Should().Be(ExerciseCategory.PullUp);
 	}
 
 	// ── Power Zone Tests ──────────────────────────────────────────────────
