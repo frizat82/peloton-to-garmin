@@ -62,6 +62,10 @@ public static class GarminFitMergeService
 			.Select(m => (Sport?)new SessionMesg(m).GetSport())
 			.FirstOrDefault();
 		var isCycling = sessionSport == Sport.Cycling;
+		var sessionSubSport = allMessages
+			.Where(m => m.Num == MesgNum.Session)
+			.Select(m => (SubSport?)new SessionMesg(m).GetSubSport())
+			.FirstOrDefault();
 		_logger.Information("FIT merge: sport={Sport} isCycling={IsCycling}", sessionSport, isCycling);
 
 		var mergedMessages = InjectPelotonIntoRecords(allMessages, pelotonSampleMap, totalDistanceMeters, avgSpeedMps, maxSpeedMps, avgCadence, maxCadence, avgPower, maxPower, isCycling);
@@ -69,7 +73,8 @@ public static class GarminFitMergeService
 		if (includeTimeInPowerZones && isCycling && workout is not null)
 			InjectPowerZones(mergedMessages, workout, pelotonSamples);
 
-		InjectExerciseSets(mergedMessages, exercises, workoutStartUnix, defaultSecondsPerRep);
+		if (sessionSubSport == SubSport.StrengthTraining)
+			InjectExerciseSets(mergedMessages, exercises, workoutStartUnix, defaultSecondsPerRep);
 
 		return EncodeMessages(mergedMessages);
 	}
@@ -425,18 +430,22 @@ public static class GarminFitMergeService
 	/// Replaces the watch's exercise sets with the Peloton class's exercises so Garmin
 	/// lists the class's lifts and builds its muscle map from them. The watch's own sets
 	/// come from rep detection and rarely match the class. Without any mappable Peloton
-	/// exercises, the watch's sets are left alone.
+	/// exercises, the watch's sets are left alone. Only strength activities get sets.
 	/// </summary>
 	private static void InjectExerciseSets(List<Mesg> messages, ICollection<P2GExercise> exercises, long workoutStartUnix, int defaultSecondsPerRep)
 	{
 		var startTime = new Dynastream.Fit.DateTime(DateTimeOffset.FromUnixTimeSeconds(workoutStartUnix).UtcDateTime);
 		var sets = ExerciseSets.Build(exercises, startTime, defaultSecondsPerRep);
-		if (sets.Count == 0) return;
+		if (!sets.Any(s => s.GetSetType() == SetType.Active)) return;
+
+		// wkt_step_index would point at the watch's own workout steps, if it ran one.
+		foreach (var set in sets)
+			set.RemoveField(set.GetField(SetMesg.FieldDefNum.WktStepIndex));
 
 		var insertAt = messages.FindIndex(m => m.Num == MesgNum.Set);
 		var watchSets = messages.RemoveAll(m => m.Num == MesgNum.Set);
 		if (insertAt < 0)
-			insertAt = messages.FindIndex(m => m.Num is MesgNum.Lap or MesgNum.Session or MesgNum.Activity);
+			insertAt = messages.FindIndex(m => m.Num is MesgNum.Session or MesgNum.Activity);
 		if (insertAt < 0)
 			insertAt = messages.Count;
 

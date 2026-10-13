@@ -17,7 +17,11 @@ public static class ExerciseSets
 
 	public static List<SetMesg> Build(ICollection<P2GExercise> exercises, Dynastream.Fit.DateTime startTime, int defaultSecondsPerRep)
 	{
+		using var tracing = Tracing.Trace($"{nameof(ExerciseSets)}.{nameof(Build)}");
+
 		var sets = new List<SetMesg>();
+		if (defaultSecondsPerRep <= 0)
+			defaultSecondsPerRep = 3;
 
 		if (exercises is null || exercises.Count <= 0)
 			return sets;
@@ -40,9 +44,9 @@ public static class ExerciseSets
 			}
 
 			var setMesg = new SetMesg();
-			var setStartTime = new Dynastream.Fit.DateTime(startTime);
-			setStartTime.Add(p2gExercise.StartOffsetSeconds);
-			setMesg.SetStartTime(setStartTime);
+			var setStart = startTime.GetDateTime().AddSeconds(p2gExercise.StartOffsetSeconds);
+			setMesg.SetStartTime(new Dynastream.Fit.DateTime(setStart));
+			setMesg.SetTimestamp(new Dynastream.Fit.DateTime(setStart.AddSeconds(p2gExercise.DurationSeconds)));
 			setMesg.SetDuration(p2gExercise.DurationSeconds);
 
 			if (!isRest)
@@ -64,9 +68,9 @@ public static class ExerciseSets
 
 			setMesg.SetRepetitions((ushort)reps);
 
-			if (p2gExercise.Weight is object)
+			if (p2gExercise.Weight?.Value > 0)
 			{
-				setMesg.SetWeight(Converter<object>.ConvertWeightToKilograms(p2gExercise.Weight.Value, p2gExercise.Weight.Unit));
+				setMesg.SetWeight(FitConverter.ConvertWeightToKilograms(p2gExercise.Weight.Value, p2gExercise.Weight.Unit));
 			}
 
 			stepIndex++;

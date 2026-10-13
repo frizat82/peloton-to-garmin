@@ -287,6 +287,19 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		}
 	}
 
+	/// <summary>
+	/// Every grouped class's exercises, in time order, with offsets shifted to be
+	/// relative to the primary workout's start (the time the merge aligns to).
+	/// </summary>
+	private static List<P2GExercise> CombineExercises(List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group, long primaryStartUnix)
+	{
+		return group
+			.Where(g => g.P2GWorkout.Exercises is not null)
+			.OrderBy(g => g.P2GWorkout.Workout.Start_Time)
+			.SelectMany(g => g.P2GWorkout.Exercises.Select(e => e with { StartOffsetSeconds = e.StartOffsetSeconds + (int)(g.P2GWorkout.Workout.Start_Time - primaryStartUnix) }))
+			.ToList();
+	}
+
 	private async Task<(MergeStatus Status, string Detail)> ApplyFitMergeAsync(
 		long garminActivityId,
 		(P2GWorkout P2GWorkout, GarminEnrichmentResult Result) primary,
@@ -332,7 +345,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 		_logger.Information("FIT merge: merging Peloton metrics into watch FIT ({Bytes} bytes)", watchFitBytes.Length);
 		var mergedFitBytes = GarminFitMergeService.MergeWatchFitWithPeloton(watchFitBytes, primary.P2GWorkout.WorkoutSamples, primary.P2GWorkout.Workout.Start_Time, primary.P2GWorkout.Workout, settings?.Format?.IncludeTimeInPowerZones ?? false,
-			primary.P2GWorkout.Exercises, settings?.Format?.Strength?.DefaultSecondsPerRep ?? 3);
+			CombineExercises(group, primary.P2GWorkout.Workout.Start_Time), settings?.Format?.Strength?.DefaultSecondsPerRep ?? 3);
 
 		_logger.Information("FIT merge: deleting original Garmin activity {GarminActivityId} before uploading merged FIT", garminActivityId);
 		await _apiClient.DeleteActivityAsync(garminActivityId, auth);
