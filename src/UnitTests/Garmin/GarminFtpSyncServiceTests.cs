@@ -10,48 +10,58 @@ using Moq.AutoMock;
 using NUnit.Framework;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace UnitTests.Garmin
 {
 	public class GarminFtpSyncServiceTests
 	{
+		private const string Cycling = GarminPowerZones.CyclingSport;
 		private static readonly UserData TestedFtp149 = new() { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Workout_Source, Cycling_Workout_Ftp = 149, Estimated_Cycling_Ftp = 143 };
 
 		private static List<GarminPowerZones> GarminZones(double cyclingFtp = 200) => new()
 		{
-			new() { Sport = "CYCLING", FunctionalThresholdPower = cyclingFtp, Zone1Floor = 0, Zone2Floor = 110, Zone3Floor = 150, Zone4Floor = 180, Zone5Floor = 210, Zone6Floor = 240, Zone7Floor = 300 },
+			new() { Sport = Cycling, FunctionalThresholdPower = cyclingFtp, Zone1Floor = 0, Zone2Floor = 110, Zone3Floor = 150, Zone4Floor = 180, Zone5Floor = 210, Zone6Floor = 240, Zone7Floor = 300 },
 			new() { Sport = "ROWING", FunctionalThresholdPower = 160, Zone1Floor = 0, Zone2Floor = 88, Zone3Floor = 120, Zone4Floor = 144, Zone5Floor = 168, Zone6Floor = 192, Zone7Floor = 240 },
 		};
 
-		private static AutoMocker Setup(List<GarminPowerZones> zones, bool syncFtp = true, bool upload = true)
+		private class Fixture
 		{
-			var mocker = new AutoMocker();
-			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync())
-				.ReturnsAsync(new Settings { Garmin = { Upload = upload, SyncCyclingFtp = syncFtp } });
-			mocker.GetMock<IGarminAuthenticationService>().Setup(a => a.GetGarminAuthenticationAsync())
-				.ReturnsAsync(new GarminApiAuthentication { AuthStage = AuthStage.Completed });
-			mocker.GetMock<IGarminApiClient>().Setup(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>())).ReturnsAsync(zones);
-			return mocker;
+			public AutoMocker Mocker { get; } = new();
+			public GarminFtpSyncService Service { get; }
+			public ICollection<GarminPowerZones> Sent { get; private set; }
+			private Mock<IGarminApiClient> Api => Mocker.GetMock<IGarminApiClient>();
+
+			public Fixture(List<GarminPowerZones> zones, bool syncFtp = true, bool upload = true, AuthStage auth = AuthStage.Completed)
+			{
+				Mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync())
+					.ReturnsAsync(new Settings { Garmin = { Upload = upload, SyncCyclingFtp = syncFtp } });
+				Mocker.GetMock<IGarminAuthenticationService>().Setup(a => a.GetGarminAuthenticationAsync())
+					.ReturnsAsync(new GarminApiAuthentication { AuthStage = auth });
+				Api.Setup(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>())).ReturnsAsync(zones);
+				Api.Setup(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()))
+					.Callback((ICollection<GarminPowerZones> z, GarminApiAuthentication _) => Sent = z);
+				Service = Mocker.CreateInstance<GarminFtpSyncService>();
+			}
+
+			public void VerifyFetched(Times times) => Api.Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), times);
+			public void VerifyNoUpdate() => Api.Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
 		}
 
 		[Test]
 		public async Task Updates_CyclingFtpAndZones_AndKeepsOtherSports()
 		{
-			var zones = GarminZones();
-			var mocker = Setup(zones);
-			ICollection<GarminPowerZones> sent = null;
-			mocker.GetMock<IGarminApiClient>().Setup(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()))
-				.Callback((ICollection<GarminPowerZones> z, GarminApiAuthentication _) => sent = z);
+			var f = new Fixture(GarminZones());
 
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			sent.Should().HaveCount(2);
-			var cycling = sent.Single(z => z.Sport == "CYCLING");
+			f.Sent.Should().HaveCount(2);
+			var cycling = f.Sent.Single(z => z.Sport == Cycling);
 			cycling.FunctionalThresholdPower.Should().Be(149);
 			new[] { cycling.Zone1Floor, cycling.Zone2Floor, cycling.Zone3Floor, cycling.Zone4Floor, cycling.Zone5Floor, cycling.Zone6Floor, cycling.Zone7Floor }
 				.Should().Equal(0, 82, 112, 134, 156, 179, 224);
-			var rowing = sent.Single(z => z.Sport == "ROWING");
+			var rowing = f.Sent.Single(z => z.Sport == "ROWING");
 			rowing.FunctionalThresholdPower.Should().Be(160);
 			rowing.Zone2Floor.Should().Be(88);
 		}
@@ -59,100 +69,105 @@ namespace UnitTests.Garmin
 		[Test]
 		public async Task ManualFtp_Uses95PercentOfEnteredBest()
 		{
-			var mocker = Setup(GarminZones());
-			ICollection<GarminPowerZones> sent = null;
-			mocker.GetMock<IGarminApiClient>().Setup(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()))
-				.Callback((ICollection<GarminPowerZones> z, GarminApiAuthentication _) => sent = z);
+			var f = new Fixture(GarminZones());
 
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(new UserData { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Manual_Source, Cycling_Ftp = 200 });
+			await f.Service.SyncCyclingFtpAsync(new UserData { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Manual_Source, Cycling_Ftp = 200 });
 
-			sent.Single(z => z.Sport == "CYCLING").FunctionalThresholdPower.Should().Be(190);
+			f.Sent.Single(z => z.Sport == Cycling).FunctionalThresholdPower.Should().Be(190);
+		}
+
+		[TestCase(149)]
+		[TestCase(149.0000001)]
+		public async Task NoUpdate_WhenGarminAlreadyMatches(double garminFtp)
+		{
+			var f = new Fixture(GarminZones(garminFtp));
+
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
+
+			f.VerifyNoUpdate();
 		}
 
 		[Test]
-		public async Task NoUpdate_WhenGarminAlreadyMatches()
+		public async Task ChecksGarminOnce_WhileFtpIsUnchanged()
 		{
-			var mocker = Setup(GarminZones(cyclingFtp: 149));
+			var f = new Fixture(GarminZones());
 
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			f.VerifyFetched(Times.Once());
 		}
 
 		[Test]
 		public async Task NoUpdate_WhenPelotonOnlyHasAnEstimate()
 		{
-			var mocker = Setup(GarminZones());
+			var f = new Fixture(GarminZones());
 
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(new UserData { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Estimated_Source, Estimated_Cycling_Ftp = 143 });
+			await f.Service.SyncCyclingFtpAsync(new UserData { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Estimated_Source, Estimated_Cycling_Ftp = 143 });
 
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), Times.Never);
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			f.VerifyFetched(Times.Never());
+			f.VerifyNoUpdate();
+		}
+
+		[Test]
+		public async Task DoesNothing_WhenNoUserData()
+		{
+			var f = new Fixture(GarminZones());
+
+			await f.Service.SyncCyclingFtpAsync(null);
+
+			f.VerifyFetched(Times.Never());
 		}
 
 		[TestCase(false, true)]
 		[TestCase(true, false)]
 		public async Task DoesNothing_WhenSettingOrUploadIsOff(bool syncFtp, bool upload)
 		{
-			var mocker = Setup(GarminZones(), syncFtp, upload);
+			var f = new Fixture(GarminZones(), syncFtp, upload);
 
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), Times.Never);
-		}
-
-		[Test]
-		public async Task NoUpdate_WhenGarminHasNoCyclingZones()
-		{
-			var mocker = Setup(GarminZones().Where(z => z.Sport != "CYCLING").ToList());
-
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
-
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
-		}
-
-		[Test]
-		public async Task NoUpdate_WhenGarminFtpOnlyDiffersByRounding()
-		{
-			var mocker = Setup(GarminZones(cyclingFtp: 149.0000001));
-
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
-
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
-		}
-
-		[Test]
-		public async Task DoesNothing_WhenNoUserData()
-		{
-			var mocker = Setup(GarminZones());
-
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(null);
-
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), Times.Never);
+			f.VerifyFetched(Times.Never());
 		}
 
 		[TestCase(AuthStage.None)]
 		[TestCase(AuthStage.NeedMfaToken)]
 		public async Task DoesNothing_WhenNotSignedInToGarmin(AuthStage stage)
 		{
-			var mocker = Setup(GarminZones());
-			mocker.GetMock<IGarminAuthenticationService>().Setup(a => a.GetGarminAuthenticationAsync())
-				.ReturnsAsync(new GarminApiAuthentication { AuthStage = stage });
+			var f = new Fixture(GarminZones(), auth: stage);
 
-			await mocker.CreateInstance<GarminFtpSyncService>().SyncCyclingFtpAsync(TestedFtp149);
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			mocker.GetMock<IGarminApiClient>().Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), Times.Never);
+			f.VerifyFetched(Times.Never());
+		}
+
+		[Test]
+		public async Task NoUpdate_WhenGarminHasNoCyclingZones()
+		{
+			var f = new Fixture(GarminZones().Where(z => z.Sport != Cycling).ToList());
+
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
+
+			f.VerifyNoUpdate();
 		}
 
 		[Test]
 		public void PowerZones_KeepFieldsP2GDoesNotKnow()
 		{
-			const string json = "{\"sport\":\"ROWING\",\"functionalThresholdPower\":160.0,\"zoneCalcBasis\":\"PERCENT_FTP\",\"userProfilePk\":42}";
+			const string json = "{\"sport\":\"ROWING\",\"functionalThresholdPower\":160.0,\"userLocalTime\":null,\"userProfilePk\":42}";
 
-			var zones = System.Text.Json.JsonSerializer.Deserialize<GarminPowerZones>(json);
-			var roundTrip = System.Text.Json.JsonSerializer.Serialize(zones);
+			var roundTrip = JsonSerializer.Serialize(JsonSerializer.Deserialize<GarminPowerZones>(json));
 
-			roundTrip.Should().Contain("\"zoneCalcBasis\":\"PERCENT_FTP\"").And.Contain("\"userProfilePk\":42");
+			roundTrip.Should().Contain("\"userLocalTime\":null").And.Contain("\"userProfilePk\":42");
+		}
+
+		[TestCase(110, 1)]
+		[TestCase(111, 2)]
+		[TestCase(300, 6)]
+		[TestCase(301, 7)]
+		public void PowerZoneModel_PutsFloorValuesInTheZoneBelow(double watts, int zone)
+		{
+			PowerZoneModel.ZoneOf(watts, ftp: 200).Should().Be(zone);
 		}
 	}
 }

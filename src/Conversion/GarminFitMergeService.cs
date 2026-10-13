@@ -385,36 +385,23 @@ public static class GarminFitMergeService
 		var outputMetric = pelotonSamples.Metrics?.FirstOrDefault(m => m.Slug == "output");
 		if (outputMetric?.Values is null) return;
 
-		var ftp = (double)ftpMaybe.Value;
-		float z1 = 0, z2 = 0, z3 = 0, z4 = 0, z5 = 0, z6 = 0, z7 = 0;
-
+		// One output sample per second, so a sample count is seconds in the zone.
+		var secondsInZone = new float[PowerZoneModel.Floors.Count];
 		foreach (var value in outputMetric.Values)
-		{
-			if (value <= 0.55 * ftp) z1++;
-			else if (value <= 0.75 * ftp) z2++;
-			else if (value <= 0.90 * ftp) z3++;
-			else if (value <= 1.05 * ftp) z4++;
-			else if (value <= 1.20 * ftp) z5++;
-			else if (value <= 1.50 * ftp) z6++;
-			else z7++;
-		}
+			if (value is not null)
+				secondsInZone[PowerZoneModel.ZoneOf(value.Value, ftpMaybe.Value) - 1]++;
 
 		for (var i = 0; i < messages.Count; i++)
 		{
 			if (messages[i].Num != MesgNum.Session) continue;
 
 			var session = new SessionMesg(messages[i]);
-			session.SetTimeInPowerZone(1, z1);
-			session.SetTimeInPowerZone(2, z2);
-			session.SetTimeInPowerZone(3, z3);
-			session.SetTimeInPowerZone(4, z4);
-			session.SetTimeInPowerZone(5, z5);
-			session.SetTimeInPowerZone(6, z6);
-			session.SetTimeInPowerZone(7, z7);
+			for (var zone = 1; zone <= secondsInZone.Length; zone++)
+				session.SetTimeInPowerZone(zone, secondsInZone[zone - 1]);
 			messages[i] = session;
 
-			_logger.Information("FIT merge: injected time-in-power-zones (FTP={Ftp}, z1={Z1}s z2={Z2}s z3={Z3}s z4={Z4}s z5={Z5}s z6={Z6}s z7={Z7}s)",
-				ftpMaybe, z1, z2, z3, z4, z5, z6, z7);
+			_logger.Information("FIT merge: injected time-in-power-zones (FTP={Ftp}, seconds in zones 1-7: {Seconds})",
+				ftpMaybe, string.Join("/", secondsInZone));
 			break;
 		}
 	}

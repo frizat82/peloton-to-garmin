@@ -1,4 +1,5 @@
-﻿using Common.Dto.Peloton;
+﻿using Common.Dto;
+using Common.Dto.Peloton;
 using Common.Observe;
 using Common.Service;
 using Garmin.Auth;
@@ -20,12 +21,15 @@ public class GarminFtpSyncService : IGarminFtpSyncService
 {
 	private static readonly ILogger _logger = LogContext.ForClass<GarminFtpSyncService>();
 
-	/// <summary>Lowest point of zones 1-7 as a share of FTP. Peloton and Garmin's default % FTP zones both use these.</summary>
-	private static readonly double[] ZoneFloors = { 0, .55, .75, .90, 1.05, 1.20, 1.50 };
+	/// <summary>How long a confirmed FTP is trusted before Garmin is checked again, in case it was changed there.</summary>
+	private static readonly TimeSpan RecheckAfter = TimeSpan.FromDays(1);
 
 	private readonly ISettingsService _settingsService;
 	private readonly IGarminApiClient _apiClient;
 	private readonly IGarminAuthenticationService _authService;
+
+	private ushort? _confirmedFtp;
+	private DateTime _confirmedAt;
 
 	public GarminFtpSyncService(ISettingsService settingsService, IGarminApiClient apiClient, IGarminAuthenticationService authService)
 	{
@@ -49,8 +53,11 @@ public class GarminFtpSyncService : IGarminFtpSyncService
 			return;
 		}
 
+		if (ftp == _confirmedFtp && DateTime.UtcNow - _confirmedAt < RecheckAfter)
+			return;
+
 		var auth = await _authService.GetGarminAuthenticationAsync();
-		if (auth.AuthStage == AuthStage.NeedMfaToken || auth.AuthStage == AuthStage.None)
+		if (!auth.IsSignedIn())
 		{
 			_logger.Warning("FTP sync: not signed in to Garmin, skipping.");
 			return;
@@ -64,19 +71,22 @@ public class GarminFtpSyncService : IGarminFtpSyncService
 			return;
 		}
 
-		if (Math.Round(cycling.FunctionalThresholdPower ?? 0) == ftp)
-			return;
+		if (Math.Round(cycling.FunctionalThresholdPower ?? 0) != ftp)
+		{
+			_logger.Information("FTP sync: updating Garmin cycling FTP from {GarminFtp} to Peloton's {PelotonFtp}", cycling.FunctionalThresholdPower, ftp);
+			SetZones(cycling, ftp.Value);
 
-		_logger.Information("FTP sync: updating Garmin cycling FTP from {GarminFtp} to Peloton's {PelotonFtp}", cycling.FunctionalThresholdPower, ftp);
-		SetZones(cycling, ftp.Value);
+			// Send every sport back unchanged apart from cycling, so other sports' zones can't be lost.
+			await _apiClient.UpdatePowerZonesAsync(allZones, auth);
+		}
 
-		// Send every sport back unchanged apart from cycling, so other sports' zones can't be lost.
-		await _apiClient.UpdatePowerZonesAsync(allZones, auth);
+		_confirmedFtp = ftp;
+		_confirmedAt = DateTime.UtcNow;
 	}
 
 	private static void SetZones(GarminPowerZones zones, ushort ftp)
 	{
-		double Floor(int zone) => Math.Round(ftp * ZoneFloors[zone - 1]);
+		double Floor(int zone) => Math.Round(ftp * PowerZoneModel.Floors[zone - 1]);
 
 		zones.FunctionalThresholdPower = ftp;
 		zones.Zone1Floor = Floor(1);

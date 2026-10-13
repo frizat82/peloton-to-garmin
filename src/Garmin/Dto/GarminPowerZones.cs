@@ -27,9 +27,6 @@ public class GarminPowerZones
 	public double? Zone6Floor { get; set; }
 	[JsonPropertyName("zone7Floor")]
 	public double? Zone7Floor { get; set; }
-	[JsonPropertyName("userLocalTime")]
-	public string UserLocalTime { get; set; }
-
 	/// <summary>Any other fields Garmin returns, kept so they are sent back unchanged.</summary>
 	[JsonExtensionData]
 	public Dictionary<string, JsonElement> OtherFields { get; set; }
