@@ -1,6 +1,5 @@
 using Common.Dto;
 using Common.Dto.Peloton;
-using Common.Helpers;
 using Common.Observe;
 using Common.Service;
 using Conversion;
@@ -42,6 +41,13 @@ public interface IGarminActivityEnrichmentService
 public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 {
 	private static readonly ILogger _logger = LogContext.ForClass<GarminActivityEnrichmentService>();
+
+	/// <summary>Uploads of a merged or restored FIT, spaced out so Garmin can finish processing the deleted original.</summary>
+	private const int UploadAttempts = 3;
+	private static readonly TimeSpan UploadRetryDelay = TimeSpan.FromSeconds(30);
+
+	/// <summary>Waits between uploads and searches. Tests replace it so they don't actually wait.</summary>
+	internal Func<TimeSpan, Task> DelayAsync { get; set; } = Task.Delay;
 
 	private readonly ISettingsService _settingsService;
 	private readonly IGarminApiClient _apiClient;
@@ -350,80 +356,116 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		_logger.Information("FIT merge: deleting original Garmin activity {GarminActivityId} before uploading merged FIT", garminActivityId);
 		await _apiClient.DeleteActivityAsync(garminActivityId, auth);
 
-		var tempPath = Path.Combine(Path.GetTempPath(), $"p2g_merge_{garminActivityId}.fit");
-		try
+		var (newActivityId, mergeError) = await UploadAndConfirmAsync(mergedFitBytes, $"p2g_merge_{garminActivityId}.fit", "merged FIT", workoutStart, preExistingIds, garminActivityId, auth);
+		if (newActivityId is not null)
 		{
-			await File.WriteAllBytesAsync(tempPath, mergedFitBytes);
-			await RetryHelper.RetryWithBackoffAsync(
-				() => _apiClient.UploadActivity(tempPath, ".fit", auth),
-				maxAttempts: 3,
-				baseDelaySeconds: 2.0,
-				logger: _logger,
-				operationName: $"FIT merge upload {garminActivityId}",
-				isRetriable: ex => !(ex is FlurlHttpException fhe && fhe.StatusCode == 415));
-			_logger.Information("FIT merge: uploaded merged FIT for original activity {GarminActivityId}", garminActivityId);
-
-			long? newActivityId = null;
-			for (int attempt = 1; attempt <= 5; attempt++)
+			var nameUpdate = new GarminActivityUpdateRequest
 			{
-				await Task.Delay(TimeSpan.FromSeconds(attempt == 1 ? 3 : 4));
-				var recent = await _apiClient.SearchActivitiesAsync(workoutStart.AddMinutes(-15), workoutStart.AddMinutes(15), auth);
-				// Only accept an activity that did not exist before the upload (truly new)
-				newActivityId = recent?
-					.Where(a => !preExistingIds.Contains(a.ActivityId) && a.ActivityId != garminActivityId)
-					.Select(a => (long?)a.ActivityId)
-					.FirstOrDefault();
-				if (newActivityId is not null)
-				{
-					_logger.Information("FIT merge: found new activity {NewId} via search after {Attempt} attempt(s)", newActivityId, attempt);
-					break;
-				}
-				_logger.Information("FIT merge: new activity not visible yet (attempt {Attempt}/5)", attempt);
-			}
-
-			if (newActivityId is not null)
-			{
-				var nameUpdate = new GarminActivityUpdateRequest
-				{
-					ActivityId = newActivityId.Value,
-					ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
-					Description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples),
-				};
-				await _apiClient.UpdateActivityAsync(newActivityId.Value, nameUpdate, auth);
-				_logger.Information("FIT merge: updated activity name to '{Name}' for new activity {NewId}", nameUpdate.ActivityName, newActivityId.Value);
-			}
-
+				ActivityId = newActivityId.Value,
+				ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
+				Description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples),
+			};
+			await _apiClient.UpdateActivityAsync(newActivityId.Value, nameUpdate, auth);
+			_logger.Information("FIT merge: updated activity name to '{Name}' for new activity {NewId}", nameUpdate.ActivityName, newActivityId.Value);
 			return (MergeStatus.Success, null);
 		}
-		catch (Exception uploadEx)
-		{
-			// All upload retries exhausted. Attempt to restore the original watch FIT.
-			_logger.Error(uploadEx, "FIT merge: all upload attempts failed for {GarminActivityId} — restoring original watch FIT", garminActivityId);
-			var uploadError = uploadEx.Message;
 
-			var restorePath = Path.Combine(Path.GetTempPath(), $"p2g_restore_{garminActivityId}.fit");
-			try
+		// The original is already deleted, so put the watch recording back rather than leave nothing in Garmin.
+		_logger.Error("FIT merge: {Error} for {GarminActivityId} — restoring original watch FIT", mergeError, garminActivityId);
+		var (restoredId, restoreError) = await UploadAndConfirmAsync(watchFitBytes, $"p2g_restore_{garminActivityId}.fit", "original watch FIT", workoutStart, preExistingIds, garminActivityId, auth);
+		if (restoredId is not null)
+		{
+			_logger.Warning("FIT merge: original watch FIT restored to Garmin as activity {RestoredId}", restoredId);
+			return (MergeStatus.OriginalRestored, $"Merge upload failed: {mergeError}");
+		}
+
+		_logger.Error("FIT merge: CRITICAL — restore also failed for {GarminActivityId}. Download the backup from the Activity Merge page to recover manually.", garminActivityId);
+		return (MergeStatus.RestoreFailed, $"Merge upload failed: {mergeError} | Restore also failed: {restoreError}");
+	}
+
+	/// <summary>
+	/// Uploads a FIT file and waits until the new activity shows up in Garmin. Garmin can reject or silently drop an
+	/// upload made right after the original was deleted, so an activity that doesn't appear is uploaded again after a pause.
+	/// Returns the new activity's ID, or null with the last error once every attempt has failed.
+	/// </summary>
+	private async Task<(long? ActivityId, string Error)> UploadAndConfirmAsync(byte[] fitBytes, string fileName, string what,
+		DateTime workoutStart, HashSet<long> preExistingIds, long deletedActivityId, GarminApiAuthentication auth)
+	{
+		var path = Path.Combine(Path.GetTempPath(), fileName);
+		string error = null;
+		try
+		{
+			await File.WriteAllBytesAsync(path, fitBytes);
+			for (var attempt = 1; attempt <= UploadAttempts; attempt++)
 			{
-				await File.WriteAllBytesAsync(restorePath, watchFitBytes);
-				await _apiClient.UploadActivity(restorePath, ".fit", auth);
-				_logger.Warning("FIT merge: original watch FIT restored to Garmin for activity {GarminActivityId}", garminActivityId);
-				return (MergeStatus.OriginalRestored, $"Upload failed after 3 attempts: {uploadError}");
+				if (attempt > 1)
+					await DelayAsync(UploadRetryDelay * (attempt - 1));
+
+				try
+				{
+					var rejection = GetRejection(await _apiClient.UploadActivity(path, ".fit", auth));
+					if (rejection is not null)
+						error = $"Garmin rejected the {what}: {rejection}";
+				}
+				catch (FlurlHttpException e) when (e.StatusCode == 415)
+				{
+					return (null, $"Garmin refused the {what} as an unsupported file: {e.Message}");
+				}
+				catch (Exception e)
+				{
+					error = $"uploading the {what} failed: {e.Message}";
+				}
+
+				// Look even after an error: an earlier attempt, or this one, may still have gone through.
+				var newActivityId = await FindNewActivityAsync(workoutStart, preExistingIds, deletedActivityId, auth);
+				if (newActivityId is not null)
+					return (newActivityId, null);
+
+				error ??= $"the {what} was accepted but never appeared in Garmin";
+				_logger.Warning("FIT merge: {Error} (attempt {Attempt}/{Max})", error, attempt, UploadAttempts);
 			}
-			catch (Exception restoreEx)
-			{
-				_logger.Error(restoreEx, "FIT merge: CRITICAL — restore also failed for {GarminActivityId}. Download the backup from the Activity Merge page to recover manually.", garminActivityId);
-				return (MergeStatus.RestoreFailed, $"Upload failed: {uploadError} | Restore also failed: {restoreEx.Message}");
-			}
-			finally
-			{
-				if (File.Exists(restorePath)) File.Delete(restorePath);
-			}
+
+			return (null, error);
 		}
 		finally
 		{
-			if (File.Exists(tempPath))
-				File.Delete(tempPath);
+			if (File.Exists(path))
+				File.Delete(path);
 		}
+	}
+
+	private async Task<long?> FindNewActivityAsync(DateTime workoutStart, HashSet<long> preExistingIds, long deletedActivityId, GarminApiAuthentication auth)
+	{
+		for (int attempt = 1; attempt <= 5; attempt++)
+		{
+			await DelayAsync(TimeSpan.FromSeconds(attempt == 1 ? 3 : 4));
+			var recent = await _apiClient.SearchActivitiesAsync(workoutStart.AddMinutes(-15), workoutStart.AddMinutes(15), auth);
+			// Only accept an activity that did not exist before the upload (truly new)
+			var newActivityId = recent?
+				.Where(a => !preExistingIds.Contains(a.ActivityId) && a.ActivityId != deletedActivityId)
+				.Select(a => (long?)a.ActivityId)
+				.FirstOrDefault();
+			if (newActivityId is not null)
+			{
+				_logger.Information("FIT merge: found new activity {NewId} via search after {Attempt} attempt(s)", newActivityId, attempt);
+				return newActivityId;
+			}
+			_logger.Information("FIT merge: new activity not visible yet (attempt {Attempt}/5)", attempt);
+		}
+		return null;
+	}
+
+	/// <summary>Why Garmin refused an upload, or null if it accepted it. "Duplicate" (code 202) counts as refused here.</summary>
+	private static string GetRejection(UploadResponse response)
+	{
+		var result = response?.DetailedImportResult;
+		if (result?.Successes?.Any() == true || result?.Failures?.Any() != true)
+			return null;
+
+		return string.Join("; ", result.Failures
+			.SelectMany(f => f.Messages ?? new List<Messages>())
+			.Select(m => m.Code == 202 ? "duplicate of an activity Garmin already has" : $"{m.Code} {m.Content}")
+			.DefaultIfEmpty("upload failed"));
 	}
 
 	public async Task<bool> UploadFitBackupToGarminAsync(string fileName)

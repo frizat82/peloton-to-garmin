@@ -12,6 +12,7 @@ using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace UnitTests.Garmin
@@ -200,16 +201,19 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminMergeDb>().Verify(db => db.SaveAsync(It.IsAny<GarminMergeRecord>()), Times.Never);
 		}
 
+		private const long WatchActivityId = 42;
+		private const long NewActivityId = 99;
+
 		/// <summary>
-		/// Regression test: when the merged FIT upload fails after the original activity was already
-		/// deleted, the service must attempt to re-upload the original watch FIT so the activity is
-		/// not permanently lost from Garmin.
+		/// A merge set up against a watch activity: Garmin "contains" the new activity once
+		/// <paramref name="visibleAfterUploads"/> uploads have been made (never when null).
 		/// </summary>
-		[Test]
-		public async Task FitMerge_When_MergedUploadFails_AttemptRestoreOfOriginal()
+		private static (AutoMocker Mocker, GarminActivityEnrichmentService Service, List<byte[]> Uploads) BuildMerge(
+			int? visibleAfterUploads, Func<int, UploadResponse> respond = null)
 		{
 			var mocker = new AutoMocker();
 			var service = mocker.CreateInstance<GarminActivityEnrichmentService>();
+			service.DelayAsync = _ => Task.CompletedTask;
 
 			var settings = BuildSettings();
 			settings.Garmin.MergeFitWithWatch = true;
@@ -218,39 +222,112 @@ namespace UnitTests.Garmin
 				.Setup(a => a.GetGarminAuthenticationAsync())
 				.ReturnsAsync(new GarminApiAuthentication { AuthStage = AuthStage.Completed });
 
-			var activity = BuildActivity(activityId: 42);
-			// First call: initial activity search. Second+ calls: post-upload polling (won't be reached).
-			mocker.GetMock<IGarminApiClient>()
-				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
-				.ReturnsAsync(new List<GarminActivitySummary> { activity });
+			var uploads = new List<byte[]>();
+			var api = mocker.GetMock<IGarminApiClient>();
+			api.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(() => visibleAfterUploads is not null && uploads.Count >= visibleAfterUploads
+					? new List<GarminActivitySummary> { BuildActivity(WatchActivityId), BuildActivity(NewActivityId) }
+					: new List<GarminActivitySummary> { BuildActivity(WatchActivityId) });
 
 			// Use a real FIT file so MergeWatchFitWithPeloton doesn't throw before reaching delete
 			var fitDataDir = Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "Data");
-			var fakeFitBytes = File.ReadAllBytes(Path.Join(fitDataDir, "Fenix_Incline.fit"));
-			mocker.GetMock<IGarminApiClient>()
-				.Setup(c => c.DownloadActivityFitAsync(42, It.IsAny<GarminApiAuthentication>()))
-				.ReturnsAsync(fakeFitBytes);
+			api.Setup(c => c.DownloadActivityFitAsync(WatchActivityId, It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(File.ReadAllBytes(Path.Join(fitDataDir, "Fenix_Incline.fit")));
+			api.Setup(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync((string path, string _, GarminApiAuthentication _) =>
+				{
+					uploads.Add(File.ReadAllBytes(path));
+					return respond?.Invoke(uploads.Count) ?? new UploadResponse { DetailedImportResult = new DetailedImportResult { Successes = new List<Success>(), Failures = new List<Failure>() } };
+				});
 
-			mocker.GetMock<IGarminApiClient>()
-				.Setup(c => c.DeleteActivityAsync(42, It.IsAny<GarminApiAuthentication>()))
-				.Returns(Task.CompletedTask);
+			return (mocker, service, uploads);
+		}
 
-			// Merged FIT upload fails
+		private static UploadResponse Duplicate() => new()
+		{
+			DetailedImportResult = new DetailedImportResult
+			{
+				Successes = new List<Success>(),
+				Failures = new List<Failure> { new() { Messages = new List<Messages> { new() { Code = 202, Content = "Duplicate Activity." } } } },
+			}
+		};
+
+		[Test]
+		public async Task FitMerge_WhenMergedActivityAppears_RenamesIt_AndDoesNotRestore()
+		{
+			var (mocker, service, uploads) = BuildMerge(visibleAfterUploads: 1);
+
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
+
+			result.MergeStatus.Should().Be(MergeStatus.Success);
+			uploads.Should().HaveCount(1);
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(NewActivityId, It.IsAny<GarminActivityUpdateRequest>(), It.IsAny<GarminApiAuthentication>()), Times.Once);
+		}
+
+		/// <summary>
+		/// Right after the delete, Garmin can refuse the merged FIT as a duplicate of the activity it is still
+		/// deleting. That must not count as success: P2G waits and uploads again.
+		/// </summary>
+		[Test]
+		public async Task FitMerge_WhenGarminRejectsAsDuplicate_UploadsAgain()
+		{
+			var (_, service, uploads) = BuildMerge(visibleAfterUploads: 2, respond: n => n == 1 ? Duplicate() : null);
+
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
+
+			result.MergeStatus.Should().Be(MergeStatus.Success);
+			uploads.Should().HaveCount(2);
+		}
+
+		/// <summary>
+		/// The merged FIT is accepted but never shows up in Garmin. With the original already deleted,
+		/// P2G must put the watch recording back instead of reporting success.
+		/// </summary>
+		[Test]
+		public async Task FitMerge_WhenMergedActivityNeverAppears_RestoresOriginal()
+		{
+			// Three merged uploads never appear; the fourth upload (the original) does.
+			var (_, service, uploads) = BuildMerge(visibleAfterUploads: 4);
+
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
+
+			result.MergeStatus.Should().Be(MergeStatus.OriginalRestored);
+			uploads.Should().HaveCount(4);
+			var original = File.ReadAllBytes(Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "Data", "Fenix_Incline.fit"));
+			uploads.Last().Should().Equal(original);
+		}
+
+		/// <summary>
+		/// When the merged FIT fails to upload after the original watch activity has been
+		/// deleted, the service must attempt to re-upload the original watch FIT so the activity is
+		/// not permanently lost from Garmin.
+		/// </summary>
+		[Test]
+		public async Task FitMerge_When_MergedUploadFails_AttemptRestoreOfOriginal()
+		{
+			var (mocker, service, _) = BuildMerge(visibleAfterUploads: null);
 			mocker.GetMock<IGarminApiClient>()
 				.Setup(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()))
 				.ThrowsAsync(new Exception("Garmin upload service unavailable"));
 
-			// Should not throw; restore attempt is best-effort
-			Func<Task> act = () => service.EnrichAsync(new[] { BuildWorkout("w1") });
-			await act.Should().NotThrowAsync();
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
 
-			// Delete was called once (activity was deleted before upload attempt)
+			result.MergeStatus.Should().Be(MergeStatus.RestoreFailed);
 			mocker.GetMock<IGarminApiClient>()
-				.Verify(c => c.DeleteActivityAsync(42, It.IsAny<GarminApiAuthentication>()), Times.Once);
+				.Verify(c => c.DeleteActivityAsync(WatchActivityId, It.IsAny<GarminApiAuthentication>()), Times.Once);
+			// 3 attempts for the merged FIT, then 3 to restore the original
+			mocker.GetMock<IGarminApiClient>()
+				.Verify(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()), Times.Exactly(6));
+		}
 
-			// UploadActivity called 4 times: 3 retries for merged FIT (all fail), then 1 restore attempt
-			mocker.GetMock<IGarminApiClient>()
-				.Verify(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()), Times.Exactly(4));
+		[TestCase("{\"detailedImportResult\":{\"uploadId\":\"123\",\"successes\":[],\"failures\":[]}}", 123L)]
+		[TestCase("{\"detailedImportResult\":{\"uploadId\":456,\"successes\":[],\"failures\":[]}}", 456L)]
+		[TestCase("{\"detailedImportResult\":{\"uploadId\":\"\",\"successes\":[],\"failures\":[]}}", null)]
+		public void UploadResponse_ReadsUploadIdAsNumberOrText(string json, long? expected)
+		{
+			var response = System.Text.Json.JsonSerializer.Deserialize<UploadResponse>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+			response.DetailedImportResult.UploadId.Should().Be(expected);
 		}
 
 		[Test]
