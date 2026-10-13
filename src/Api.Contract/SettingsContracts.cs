@@ -37,6 +37,7 @@ public class SettingsGetResponse
 			IsPasswordSet = !string.IsNullOrEmpty(settings.Garmin.Password),
 			EnrichGarminActivities = settings.Garmin.EnrichGarminActivities,
 			MergeFitWithWatch = settings.Garmin.MergeFitWithWatch,
+			SyncCyclingFtp = settings.Garmin.SyncCyclingFtp,
 			ActivityMatchWindowSeconds = settings.Garmin.ActivityMatchWindowSeconds,
 			Api = settings.Garmin.Api ?? new GarminApiSettings()
 		};
@@ -96,6 +97,7 @@ public class SettingsGarminGetResponse
 	public FileFormat FormatToUpload { get; set; }
 	public bool EnrichGarminActivities { get; set; }
 	public bool MergeFitWithWatch { get; set; }
+	public bool SyncCyclingFtp { get; set; }
 	public int ActivityMatchWindowSeconds { get; set; } = 900;
 	public GarminApiSettings Api { get; set; } = new GarminApiSettings();
 }
@@ -109,6 +111,7 @@ public class SettingsGarminPostRequest
 	public FileFormat FormatToUpload { get; set; }
 	public bool EnrichGarminActivities { get; set; }
 	public bool MergeFitWithWatch { get; set; }
+	public bool SyncCyclingFtp { get; set; }
 	public int ActivityMatchWindowSeconds { get; set; } = 900;
 	public GarminApiSettings Api { get; set; } = new GarminApiSettings();
 }
@@ -171,6 +174,7 @@ public static class Mapping
 			Upload = response.Upload,
 			EnrichGarminActivities = response.EnrichGarminActivities,
 			MergeFitWithWatch = response.MergeFitWithWatch,
+			SyncCyclingFtp = response.SyncCyclingFtp,
 			ActivityMatchWindowSeconds = response.ActivityMatchWindowSeconds,
 			Api = response.Api,
 		};
@@ -187,6 +191,7 @@ public static class Mapping
 			Upload = request.Upload,
 			EnrichGarminActivities = request.EnrichGarminActivities,
 			MergeFitWithWatch = request.MergeFitWithWatch,
+			SyncCyclingFtp = request.SyncCyclingFtp,
 			ActivityMatchWindowSeconds = request.ActivityMatchWindowSeconds,
 			Api = request.Api,
 		};

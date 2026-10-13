@@ -25,6 +25,17 @@ public record UserData
 
 	public ushort Estimated_Cycling_Ftp { get; init; }
 
+	/// <summary>
+	/// The rider's measured cycling FTP: from an FTP test, or 95% of a manually entered 20 min best.
+	/// Null when Peloton only has an estimate.
+	/// </summary>
+	public ushort? GetMeasuredCyclingFtp() => Cycling_Ftp_Source switch
+	{
+		CyclingFtpSource.Ftp_Workout_Source when Cycling_Workout_Ftp > 0 => Cycling_Workout_Ftp,
+		CyclingFtpSource.Ftp_Manual_Source when Cycling_Ftp > 0 => (ushort)System.Math.Round(Cycling_Ftp * .95),
+		_ => null,
+	};
+
 	public uint Default_Max_Heart_Rate { get; init; }
 	public uint Customized_Max_Heart_Rate { get; init; }
 

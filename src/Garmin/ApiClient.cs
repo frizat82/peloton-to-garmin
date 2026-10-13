@@ -30,6 +30,8 @@ namespace Garmin
 		Task<byte[]> DownloadActivityFitAsync(long activityId, GarminApiAuthentication auth);
 		Task DeleteActivityAsync(long activityId, GarminApiAuthentication auth);
 		Task<long?> PollUploadActivityIdAsync(long uploadId, GarminApiAuthentication auth);
+		Task<ICollection<GarminPowerZones>> GetPowerZonesAsync(GarminApiAuthentication auth);
+		Task UpdatePowerZonesAsync(ICollection<GarminPowerZones> zones, GarminApiAuthentication auth);
 	}
 
 	public class ApiClient : IGarminApiClient
@@ -310,6 +312,22 @@ namespace Garmin
 
 			_logger.Warning("FIT merge: could not resolve new activity ID for upload {UploadId} after polling", uploadId);
 			return null;
+		}
+
+		public async Task<ICollection<GarminPowerZones>> GetPowerZonesAsync(GarminApiAuthentication auth)
+		{
+			var settings = await _settingsService.GetSettingsAsync();
+
+			return await WithConnectApiHeaders($"{settings.Garmin.Api.PowerZonesUrl}/all", auth, settings.Garmin.Api)
+				.GetJsonAsync<ICollection<GarminPowerZones>>();
+		}
+
+		public async Task UpdatePowerZonesAsync(ICollection<GarminPowerZones> zones, GarminApiAuthentication auth)
+		{
+			var settings = await _settingsService.GetSettingsAsync();
+
+			await WithConnectApiHeaders(settings.Garmin.Api.PowerZonesUrl, auth, settings.Garmin.Api)
+				.PutJsonAsync(zones);
 		}
 	}
 }

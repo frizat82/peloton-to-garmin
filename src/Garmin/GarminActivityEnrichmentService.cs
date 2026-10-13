@@ -74,7 +74,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 		var auth = await _authService.GetGarminAuthenticationAsync();
 
-		if (auth.AuthStage == AuthStage.NeedMfaToken || auth.AuthStage == AuthStage.None)
+		if (!auth.IsSignedIn())
 		{
 			_logger.Warning("Not authenticated with Garmin, skipping activity enrichment.");
 			return empty;
@@ -95,7 +95,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 		var auth = await _authService.GetGarminAuthenticationAsync();
 
-		if (auth.AuthStage == AuthStage.NeedMfaToken || auth.AuthStage == AuthStage.None)
+		if (!auth.IsSignedIn())
 		{
 			_logger.Warning("Not authenticated with Garmin, skipping activity enrichment preview.");
 			return empty;
@@ -432,7 +432,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			throw new ArgumentException("Invalid file name.", nameof(fileName));
 
 		var auth = await _authService.GetGarminAuthenticationAsync();
-		if (auth.AuthStage == AuthStage.NeedMfaToken || auth.AuthStage == AuthStage.None)
+		if (!auth.IsSignedIn())
 		{
 			_logger.Warning("UploadFitBackup: not authenticated with Garmin.");
 			return false;

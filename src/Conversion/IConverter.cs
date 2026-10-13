@@ -539,13 +539,7 @@ namespace Conversion
 			}
 
 			if ((ftp is null || ftp <= 0) && userData is object)
-			{
-				if (userData.Cycling_Ftp_Source == CyclingFtpSource.Ftp_Manual_Source)
-					ftp = (ushort)Math.Round(userData.Cycling_Ftp * .95);
-
-				if (userData.Cycling_Ftp_Source == CyclingFtpSource.Ftp_Workout_Source)
-					ftp = userData.Cycling_Workout_Ftp;
-			}
+				ftp = userData.GetMeasuredCyclingFtp();
 
 			if (ftp is null || ftp <= 0)
 			{

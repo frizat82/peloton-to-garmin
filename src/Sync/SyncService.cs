@@ -36,18 +36,20 @@ namespace Sync
 		private readonly IPelotonService _pelotonService;
 		private readonly IGarminUploader _garminUploader;
 		private readonly IGarminActivityEnrichmentService _enrichmentService;
+		private readonly IGarminFtpSyncService _ftpSyncService;
 		private readonly IEnumerable<IConverter> _converters;
 		private readonly ISyncStatusDb _db;
 		private readonly ISyncedWorkoutsDb _syncedWorkoutsDb;
 		private readonly IFileHandling _fileHandler;
 		private readonly ISettingsService _settingsService;
 
-		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IGarminActivityEnrichmentService enrichmentService, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, ISyncedWorkoutsDb syncedWorkoutsDb, IFileHandling fileHandler)
+		public SyncService(ISettingsService settingService, IPelotonService pelotonService, IGarminUploader garminUploader, IGarminActivityEnrichmentService enrichmentService, IGarminFtpSyncService ftpSyncService, IEnumerable<IConverter> converters, ISyncStatusDb dbClient, ISyncedWorkoutsDb syncedWorkoutsDb, IFileHandling fileHandler)
 		{
 			_settingsService = settingService;
 			_pelotonService = pelotonService;
 			_garminUploader = garminUploader;
 			_enrichmentService = enrichmentService;
+			_ftpSyncService = ftpSyncService;
 			_converters = converters;
 			_syncedWorkoutsDb = syncedWorkoutsDb;
 			_db = dbClient;
@@ -69,10 +71,6 @@ namespace Sync
 			using var timer = SyncHistogram.NewTimer();
 			using var activity = Tracing.Trace($"{nameof(SyncService)}.{nameof(SyncAsync)}.ByWorkoutIds");
 
-			var response = new SyncResult();
-			var recentWorkouts = workoutIds.Select(w => new Workout() { Id = w }).ToList();
-			var settings = await _settingsService.GetSettingsAsync();
-
 			UserData? userData = null;
 			try
 			{
@@ -82,6 +80,27 @@ namespace Sync
 			{
 				_logger.Warning(e, $"Failed to fetch user data from Peloton: {e.Message}, FTP info may be missing for certain non-class workout types (Just Ride).");
 			}
+
+			var response = await SyncWorkoutsAsync(workoutIds, userData, exclude, forceStackClasses);
+
+			// Runs on every sync, after uploads, so workouts done under the old FTP are uploaded first.
+			try
+			{
+				await _ftpSyncService.SyncCyclingFtpAsync(userData);
+			}
+			catch (Exception e)
+			{
+				_logger.Warning(e, "Failed to sync cycling FTP to Garmin. {Message}", e.Message);
+			}
+
+			return response;
+		}
+
+		private async Task<SyncResult> SyncWorkoutsAsync(IEnumerable<string> workoutIds, UserData? userData, ICollection<WorkoutType>? exclude, bool forceStackClasses)
+		{
+			var response = new SyncResult();
+			var recentWorkouts = workoutIds.Select(w => new Workout() { Id = w }).ToList();
+			var settings = await _settingsService.GetSettingsAsync();
 
 			P2GWorkout[] workouts = { };
 			try
@@ -115,7 +134,7 @@ namespace Sync
 								}).ToList();
 
 			var filteredWorkoutsCount = filteredWorkouts.Count;
-			activity?.AddTag("workouts.filtered", filteredWorkoutsCount);
+			System.Diagnostics.Activity.Current?.AddTag("workouts.filtered", filteredWorkoutsCount);
 			_logger.Information("Found {@NumWorkouts} workouts remaining after filtering ExcludedWorkoutTypes.", filteredWorkoutsCount);
 
 			if (filteredWorkoutsCount == 0)
