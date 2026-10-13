@@ -345,7 +345,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 
 		_logger.Information("FIT merge: merging Peloton metrics into watch FIT ({Bytes} bytes)", watchFitBytes.Length);
 		var mergedFitBytes = GarminFitMergeService.MergeWatchFitWithPeloton(watchFitBytes, primary.P2GWorkout.WorkoutSamples, primary.P2GWorkout.Workout.Start_Time, primary.P2GWorkout.Workout, settings?.Format?.IncludeTimeInPowerZones ?? false,
-			CombineExercises(group, primary.P2GWorkout.Workout.Start_Time), settings?.Format?.Strength?.DefaultSecondsPerRep ?? 3);
+			CombineExercises(group, primary.P2GWorkout.Workout.Start_Time), settings?.Format?.Strength?.DefaultSecondsPerRep ?? 0);
 
 		_logger.Information("FIT merge: deleting original Garmin activity {GarminActivityId} before uploading merged FIT", garminActivityId);
 		await _apiClient.DeleteActivityAsync(garminActivityId, auth);

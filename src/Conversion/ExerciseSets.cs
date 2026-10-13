@@ -21,7 +21,7 @@ public static class ExerciseSets
 
 		var sets = new List<SetMesg>();
 		if (defaultSecondsPerRep <= 0)
-			defaultSecondsPerRep = 3;
+			defaultSecondsPerRep = new Strength().DefaultSecondsPerRep;
 
 		if (exercises is null || exercises.Count <= 0)
 			return sets;
@@ -57,14 +57,10 @@ public static class ExerciseSets
 
 			setMesg.SetMessageIndex(stepIndex);
 			setMesg.SetSetType(isRest ? SetType.Rest : SetType.Active);
-			setMesg.SetWktStepIndex(stepIndex);
 
 			var reps = p2gExercise.Reps;
-			if (p2gExercise.Type == MovementTargetType.Time)
-			{
-				if (reps is null || reps <= 0)
-					reps = p2gExercise.DurationSeconds / defaultSecondsPerRep;
-			}
+			if (p2gExercise.Type == MovementTargetType.Time && (reps is null || reps <= 0))
+				reps = p2gExercise.DurationSeconds / defaultSecondsPerRep;
 
 			setMesg.SetRepetitions((ushort)reps);
 

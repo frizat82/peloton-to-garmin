@@ -416,18 +416,6 @@ public class GarminFitMergeServiceTests
 		return BuildFitBytes(messages);
 	}
 
-	private static List<SetMesg> DecodeSets(byte[] fitBytes)
-	{
-		var sets = new List<SetMesg>();
-		var decoder = new Decode();
-		var broadcaster = new MesgBroadcaster();
-		decoder.MesgEvent += broadcaster.OnMesg;
-		decoder.MesgDefinitionEvent += broadcaster.OnMesgDefinition;
-		broadcaster.SetMesgEvent += (_, e) => sets.Add((SetMesg)e.mesg);
-		decoder.Read(new MemoryStream(fitBytes));
-		return sets;
-	}
-
 	[Test]
 	public void ExerciseSets_ReplaceWatchSets_WithPelotonClassExercises()
 	{
@@ -444,7 +432,7 @@ public class GarminFitMergeServiceTests
 
 		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, BuildSamples(cadenceSlug: null, speedKph: null), workoutStart, exercises: exercises, defaultSecondsPerRep: 3);
 
-		var sets = DecodeSets(merged);
+		var sets = FitTestHelper.DecodeSets(merged);
 		sets.Should().HaveCount(3, "the unmapped move is skipped and the watch's own set is replaced");
 		sets.Select(s => s.GetSetType()).Should().Equal(SetType.Active, SetType.Rest, SetType.Active);
 		sets[0].GetCategory(0).Should().Be(ExerciseCategory.WarmUp);
@@ -472,7 +460,7 @@ public class GarminFitMergeServiceTests
 
 		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(fitBytes, BuildSamples(cadenceSlug: null, speedKph: null), new DateTimeOffset(start).ToUnixTimeSeconds(), exercises: exercises);
 
-		var sets = DecodeSets(merged);
+		var sets = FitTestHelper.DecodeSets(merged);
 		sets.Should().ContainSingle();
 		sets[0].GetCategory(0).Should().Be(ExerciseCategory.PullUp);
 	}
@@ -489,7 +477,7 @@ public class GarminFitMergeServiceTests
 
 		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(BuildStrengthFitWithWatchSet(start), BuildSamples(cadenceSlug: null, speedKph: null), new DateTimeOffset(start).ToUnixTimeSeconds(), exercises: exercises);
 
-		DecodeSets(merged).Should().ContainSingle().Which.GetCategory(0).Should().Be(ExerciseCategory.PullUp);
+		FitTestHelper.DecodeSets(merged).Should().ContainSingle().Which.GetCategory(0).Should().Be(ExerciseCategory.PullUp);
 	}
 
 	[Test]
@@ -503,7 +491,7 @@ public class GarminFitMergeServiceTests
 
 		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(BuildStrengthFitWithWatchSet(start, SubSport.CardioTraining), BuildSamples(cadenceSlug: null, speedKph: null), new DateTimeOffset(start).ToUnixTimeSeconds(), exercises: exercises);
 
-		DecodeSets(merged).Should().ContainSingle().Which.GetCategory(0).Should().Be(ExerciseCategory.PullUp);
+		FitTestHelper.DecodeSets(merged).Should().ContainSingle().Which.GetCategory(0).Should().Be(ExerciseCategory.PullUp);
 	}
 
 	[Test]
@@ -517,7 +505,7 @@ public class GarminFitMergeServiceTests
 
 		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(BuildStrengthFitWithWatchSet(start), BuildSamples(cadenceSlug: null, speedKph: null), new DateTimeOffset(start).ToUnixTimeSeconds(), exercises: exercises, defaultSecondsPerRep: 0);
 
-		DecodeSets(merged).Should().ContainSingle().Which.GetRepetitions().Should().Be(10);
+		FitTestHelper.DecodeSets(merged).Should().ContainSingle().Which.GetRepetitions().Should().Be(10);
 	}
 
 	[Test]
@@ -531,7 +519,7 @@ public class GarminFitMergeServiceTests
 
 		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(BuildStrengthFitWithWatchSet(start), BuildSamples(cadenceSlug: null, speedKph: null), new DateTimeOffset(start).ToUnixTimeSeconds(), exercises: exercises);
 
-		DecodeSets(merged).Single().GetStartTime().GetTimeStamp().Should().Be(new Dynastream.Fit.DateTime(start).GetTimeStamp() - 120);
+		FitTestHelper.DecodeSets(merged).Single().GetStartTime().GetTimeStamp().Should().Be(new Dynastream.Fit.DateTime(start).GetTimeStamp() - 120);
 	}
 
 	// ── Power Zone Tests ──────────────────────────────────────────────────
