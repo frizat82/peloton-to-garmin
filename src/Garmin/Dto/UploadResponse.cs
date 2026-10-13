@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -8,6 +9,29 @@ namespace Garmin.Dto
 	public class UploadResponse
 	{
 		public DetailedImportResult DetailedImportResult { get; set; }
+
+		/// <summary>The new activity's ID, when Garmin processed the upload straight away.</summary>
+		[JsonIgnore]
+		public long? NewActivityId => DetailedImportResult?.Successes?.Select(s => s.InternalId).FirstOrDefault(id => id is not null);
+
+		/// <summary>Garmin already has this file (code 202).</summary>
+		[JsonIgnore]
+		public bool IsDuplicate => DetailedImportResult?.Failures?.Any(f => f.Messages?.Any(m => m.Code == DuplicateCode) == true) == true;
+
+		/// <summary>Why Garmin refused the upload, or null if it took it. A duplicate counts as refused.</summary>
+		public string GetRejection()
+		{
+			var result = DetailedImportResult;
+			if (result?.Successes?.Any() == true || result?.Failures?.Any() != true)
+				return null;
+
+			return string.Join("; ", result.Failures
+				.SelectMany(f => f.Messages ?? new List<Messages>())
+				.Select(m => m.Code == DuplicateCode ? "duplicate of an activity Garmin already has" : $"{m.Code} {m.Content}")
+				.DefaultIfEmpty("upload failed"));
+		}
+
+		private const int DuplicateCode = 202;
 	}
 
 	public class DetailedImportResult

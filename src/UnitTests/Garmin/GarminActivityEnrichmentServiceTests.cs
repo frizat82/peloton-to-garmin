@@ -208,6 +208,8 @@ namespace UnitTests.Garmin
 		/// A merge set up against a watch activity: Garmin "contains" the new activity once
 		/// <paramref name="visibleAfterUploads"/> uploads have been made (never when null).
 		/// </summary>
+		private static readonly byte[] WatchFit = File.ReadAllBytes(Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "Data", "Fenix_Incline.fit"));
+
 		private static (AutoMocker Mocker, GarminActivityEnrichmentService Service, List<byte[]> Uploads) BuildMerge(
 			int? visibleAfterUploads, Func<int, UploadResponse> respond = null)
 		{
@@ -230,9 +232,8 @@ namespace UnitTests.Garmin
 					: new List<GarminActivitySummary> { BuildActivity(WatchActivityId) });
 
 			// Use a real FIT file so MergeWatchFitWithPeloton doesn't throw before reaching delete
-			var fitDataDir = Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "Data");
 			api.Setup(c => c.DownloadActivityFitAsync(WatchActivityId, It.IsAny<GarminApiAuthentication>()))
-				.ReturnsAsync(File.ReadAllBytes(Path.Join(fitDataDir, "Fenix_Incline.fit")));
+				.ReturnsAsync(WatchFit);
 			api.Setup(c => c.UploadActivity(It.IsAny<string>(), ".fit", It.IsAny<GarminApiAuthentication>()))
 				.ReturnsAsync((string path, string _, GarminApiAuthentication _) =>
 				{
@@ -293,8 +294,68 @@ namespace UnitTests.Garmin
 
 			result.MergeStatus.Should().Be(MergeStatus.OriginalRestored);
 			uploads.Should().HaveCount(4);
-			var original = File.ReadAllBytes(Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "Data", "Fenix_Incline.fit"));
-			uploads.Last().Should().Equal(original);
+			uploads.Last().Should().Equal(WatchFit);
+		}
+
+		[Test]
+		public async Task FitMerge_UsesActivityIdFromGarminsReply()
+		{
+			var (mocker, service, uploads) = BuildMerge(visibleAfterUploads: null,
+				respond: _ => new UploadResponse { DetailedImportResult = new DetailedImportResult { Successes = new List<Success> { new() { InternalId = 77 } }, Failures = new List<Failure>() } });
+
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
+
+			result.MergeStatus.Should().Be(MergeStatus.Success);
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(77, It.IsAny<GarminActivityUpdateRequest>(), It.IsAny<GarminApiAuthentication>()), Times.Once);
+		}
+
+		[Test]
+		public async Task FitMerge_PollsUploadIdForTheNewActivity()
+		{
+			var (mocker, service, _) = BuildMerge(visibleAfterUploads: null,
+				respond: _ => new UploadResponse { DetailedImportResult = new DetailedImportResult { UploadId = 5, Successes = new List<Success>(), Failures = new List<Failure>() } });
+			mocker.GetMock<IGarminApiClient>().Setup(c => c.PollUploadActivityIdAsync(5, It.IsAny<GarminApiAuthentication>())).ReturnsAsync(88);
+
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
+
+			result.MergeStatus.Should().Be(MergeStatus.Success);
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(88, It.IsAny<GarminActivityUpdateRequest>(), It.IsAny<GarminApiAuthentication>()), Times.Once);
+		}
+
+		/// <summary>An unrelated activity later the same day must not be taken for the merged upload.</summary>
+		[Test]
+		public async Task FitMerge_IgnoresNewActivitiesAtOtherTimesOfDay()
+		{
+			var (mocker, service, uploads) = BuildMerge(visibleAfterUploads: null);
+			var sameDayLater = BuildActivity(NewActivityId, startGmt: "2024-06-15 18:00:00");
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(() => uploads.Count == 0
+					? new List<GarminActivitySummary> { BuildActivity(WatchActivityId) }
+					: new List<GarminActivitySummary> { BuildActivity(WatchActivityId), sameDayLater });
+
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
+
+			result.MergeStatus.Should().Be(MergeStatus.RestoreFailed);
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(NewActivityId, It.IsAny<GarminActivityUpdateRequest>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+		}
+
+		/// <summary>A failing search after the delete must still lead to a restore, not abort the merge.</summary>
+		[Test]
+		public async Task FitMerge_WhenSearchFailsAfterDelete_StillRestores()
+		{
+			var (mocker, service, uploads) = BuildMerge(visibleAfterUploads: null);
+			var searches = 0;
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(() => ++searches == 1
+					? new List<GarminActivitySummary> { BuildActivity(WatchActivityId) }
+					: throw new Exception("Garmin search unavailable"));
+
+			var result = (await service.EnrichAsync(new[] { BuildWorkout("w1") })).Single();
+
+			result.MergeStatus.Should().Be(MergeStatus.RestoreFailed);
+			uploads.Should().HaveCount(6);
 		}
 
 		/// <summary>

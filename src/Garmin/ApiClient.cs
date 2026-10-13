@@ -176,28 +176,10 @@ namespace Garmin
 			_logger.Debug("Upload response: {Json}", rawJson);
 			var response = System.Text.Json.JsonSerializer.Deserialize<UploadResponse>(rawJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-			var result = response.DetailedImportResult;
-
-			if (result.Failures.Any())
-			{
-				foreach (var failure in result.Failures)
-				{
-					if (failure.Messages.Any())
-					{
-						foreach (var message in failure.Messages)
-						{
-							if (message.Code == 202)
-							{
-								_logger.Information("Activity already uploaded {garminWorkout}", result.FileName);
-							}
-							else
-							{
-								_logger.Error("Failed to upload activity to Garmin. Message: {errorMessage}", message);
-							}
-						}
-					}
-				}
-			}
+			if (response.IsDuplicate)
+				_logger.Information("Activity already uploaded {garminWorkout}", response.DetailedImportResult?.FileName);
+			else if (response.GetRejection() is { } rejection)
+				_logger.Error("Failed to upload activity to Garmin. {errorMessage}", rejection);
 
 			return response;
 		}
