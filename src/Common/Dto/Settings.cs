@@ -212,7 +212,9 @@ public class GarminApiSettings
 	public string ActivitySearchUrl { get; set; } = "https://connectapi.garmin.com/activitylist-service/activities/search/activities";
 	public string ActivityUpdateUrl { get; set; } = "https://connectapi.garmin.com/activity-service/activity";
 	public string ActivityDownloadUrl { get; set; } = "https://connectapi.garmin.com/download-service/files/activity";
-	public string PowerZonesUrl { get; set; } = "https://connectapi.garmin.com/biometric-service/powerZones/sports";
+	// From Garmin Connect's own web app: GET reads every sport; PUT saves an array holding one sport's zones.
+	public string PowerZonesReadUrl { get; set; } = "https://connectapi.garmin.com/biometric-service/powerZones/sports/all";
+	public string PowerZonesSaveUrl { get; set; } = "https://connectapi.garmin.com/biometric-service/powerZones/all";
 }
 
 public enum FileFormat : byte

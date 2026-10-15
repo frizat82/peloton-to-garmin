@@ -63,8 +63,7 @@ public class GarminFtpSyncService : IGarminFtpSyncService
 			return;
 		}
 
-		var allZones = await _apiClient.GetPowerZonesAsync(auth);
-		var cycling = allZones?.FirstOrDefault(z => z.Sport == GarminPowerZones.CyclingSport);
+		var cycling = await GetCyclingZonesAsync(auth);
 		if (cycling is null)
 		{
 			_logger.Warning("FTP sync: Garmin returned no cycling power zones, skipping.");
@@ -73,16 +72,27 @@ public class GarminFtpSyncService : IGarminFtpSyncService
 
 		if (Math.Round(cycling.FunctionalThresholdPower ?? 0) != ftp)
 		{
-			_logger.Information("FTP sync: updating Garmin cycling FTP from {GarminFtp} to Peloton's {PelotonFtp}", cycling.FunctionalThresholdPower, ftp);
+			var garminFtp = cycling.FunctionalThresholdPower;
 			SetZones(cycling, ftp.Value);
+			await _apiClient.UpdatePowerZonesAsync(cycling, auth);
 
-			// Send every sport back unchanged apart from cycling, so other sports' zones can't be lost.
-			await _apiClient.UpdatePowerZonesAsync(allZones, auth);
+			// Only count the save once Garmin reports the new FTP back.
+			var saved = await GetCyclingZonesAsync(auth);
+			if (Math.Round(saved?.FunctionalThresholdPower ?? 0) != ftp)
+			{
+				_logger.Warning("FTP sync: Garmin accepted the cycling FTP update but still reports {GarminFtp} instead of {PelotonFtp}", saved?.FunctionalThresholdPower, ftp);
+				return;
+			}
+
+			_logger.Information("FTP sync: Garmin cycling FTP changed from {GarminFtp} to Peloton's {PelotonFtp}", garminFtp, ftp);
 		}
 
 		_confirmedFtp = ftp;
 		_confirmedAt = DateTime.UtcNow;
 	}
+
+	private async Task<GarminPowerZones> GetCyclingZonesAsync(GarminApiAuthentication auth) =>
+		(await _apiClient.GetPowerZonesAsync(auth))?.FirstOrDefault(z => z.Sport == GarminPowerZones.CyclingSport);
 
 	private static void SetZones(GarminPowerZones zones, ushort ftp)
 	{

@@ -9,6 +9,7 @@ using Moq;
 using Moq.AutoMock;
 using NUnit.Framework;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -30,7 +31,7 @@ namespace UnitTests.Garmin
 		{
 			public AutoMocker Mocker { get; } = new();
 			public GarminFtpSyncService Service { get; }
-			public ICollection<GarminPowerZones> Sent { get; private set; }
+			public List<GarminPowerZones> Sent { get; } = new();
 			private Mock<IGarminApiClient> Api => Mocker.GetMock<IGarminApiClient>();
 
 			public Fixture(List<GarminPowerZones> zones, bool syncFtp = true, bool upload = true, AuthStage auth = AuthStage.Completed)
@@ -40,30 +41,68 @@ namespace UnitTests.Garmin
 				Mocker.GetMock<IGarminAuthenticationService>().Setup(a => a.GetGarminAuthenticationAsync())
 					.ReturnsAsync(new GarminApiAuthentication { AuthStage = auth });
 				Api.Setup(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>())).ReturnsAsync(zones);
-				Api.Setup(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()))
-					.Callback((ICollection<GarminPowerZones> z, GarminApiAuthentication _) => Sent = z);
+				Api.Setup(c => c.UpdatePowerZonesAsync(It.IsAny<GarminPowerZones>(), It.IsAny<GarminApiAuthentication>()))
+					.Callback((GarminPowerZones z, GarminApiAuthentication _) => Sent.Add(z));
 				Service = Mocker.CreateInstance<GarminFtpSyncService>();
 			}
 
 			public void VerifyFetched(Times times) => Api.Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), times);
-			public void VerifyNoUpdate() => Api.Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			public void VerifyNoUpdate() => Api.Verify(c => c.UpdatePowerZonesAsync(It.IsAny<GarminPowerZones>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
 		}
 
 		[Test]
-		public async Task Updates_CyclingFtpAndZones_AndKeepsOtherSports()
+		public async Task Updates_OnlyCycling_WithPelotonFtpAndZones()
 		{
 			var f = new Fixture(GarminZones());
 
 			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			f.Sent.Should().HaveCount(2);
-			var cycling = f.Sent.Single(z => z.Sport == Cycling);
+			var cycling = f.Sent.Should().ContainSingle().Which;
+			cycling.Sport.Should().Be(Cycling);
 			cycling.FunctionalThresholdPower.Should().Be(149);
 			new[] { cycling.Zone1Floor, cycling.Zone2Floor, cycling.Zone3Floor, cycling.Zone4Floor, cycling.Zone5Floor, cycling.Zone6Floor, cycling.Zone7Floor }
 				.Should().Equal(0, 82, 112, 134, 156, 179, 224);
-			var rowing = f.Sent.Single(z => z.Sport == "ROWING");
-			rowing.FunctionalThresholdPower.Should().Be(160);
-			rowing.Zone2Floor.Should().Be(88);
+		}
+
+		/// <summary>A save Garmin accepts but doesn't apply must not be reported or remembered as done.</summary>
+		[Test]
+		public async Task SaveThatGarminDoesNotApply_IsNotTrusted()
+		{
+			var f = new Fixture(GarminZones());
+			// Every read returns a fresh copy still at 200, as if the save was ignored.
+			f.Mocker.GetMock<IGarminApiClient>().Setup(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>())).ReturnsAsync(() => GarminZones());
+
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
+
+			// Read, save, read back, on both runs: the unconfirmed FTP isn't cached.
+			f.Sent.Should().HaveCount(2);
+			f.VerifyFetched(Times.Exactly(4));
+		}
+
+		/// <summary>Settings saved before this fix hold the wrong save address under an old key; loading them must not use it.</summary>
+		[Test]
+		public async Task OldSavedSettings_LoadWithCurrentAddresses()
+		{
+			var dataDir = Path.Join(Path.GetTempPath(), $"p2g_settings_{System.Guid.NewGuid():N}");
+			Directory.CreateDirectory(dataDir);
+			File.WriteAllText(Path.Join(dataDir, "SettingsDb.json"),
+				"{\"1\":{\"garmin\":{\"api\":{\"powerZonesUrl\":\"https://connectapi.garmin.com/biometric-service/powerZones/sports\"}}}}");
+			var original = global::Common.Stateful.Statics.DefaultDataDirectory;
+			try
+			{
+				global::Common.Stateful.Statics.DefaultDataDirectory = dataDir;
+				var settings = await new global::Common.Database.SettingsDb(new global::Common.IOWrapper()).GetSettingsAsync(1);
+
+				var defaults = new GarminApiSettings();
+				settings.Garmin.Api.PowerZonesReadUrl.Should().Be(defaults.PowerZonesReadUrl);
+				settings.Garmin.Api.PowerZonesSaveUrl.Should().Be(defaults.PowerZonesSaveUrl);
+			}
+			finally
+			{
+				global::Common.Stateful.Statics.DefaultDataDirectory = original;
+				Directory.Delete(dataDir, recursive: true);
+			}
 		}
 
 		[Test]
@@ -73,7 +112,7 @@ namespace UnitTests.Garmin
 
 			await f.Service.SyncCyclingFtpAsync(new UserData { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Manual_Source, Cycling_Ftp = 200 });
 
-			f.Sent.Single(z => z.Sport == Cycling).FunctionalThresholdPower.Should().Be(190);
+			f.Sent.Should().ContainSingle().Which.FunctionalThresholdPower.Should().Be(190);
 		}
 
 		[TestCase(149)]
@@ -95,7 +134,8 @@ namespace UnitTests.Garmin
 			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			f.VerifyFetched(Times.Once());
+			// The first run reads, saves and reads back; the second trusts the confirmed FTP.
+			f.VerifyFetched(Times.Exactly(2));
 		}
 
 		[Test]
