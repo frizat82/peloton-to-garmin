@@ -31,7 +31,7 @@ namespace Garmin
 		Task DeleteActivityAsync(long activityId, GarminApiAuthentication auth);
 		Task<long?> PollUploadActivityIdAsync(long uploadId, GarminApiAuthentication auth);
 		Task<ICollection<GarminPowerZones>> GetPowerZonesAsync(GarminApiAuthentication auth);
-		Task UpdatePowerZonesAsync(ICollection<GarminPowerZones> zones, GarminApiAuthentication auth);
+		Task UpdatePowerZonesAsync(GarminPowerZones zones, GarminApiAuthentication auth);
 	}
 
 	public class ApiClient : IGarminApiClient
@@ -300,16 +300,16 @@ namespace Garmin
 		{
 			var settings = await _settingsService.GetSettingsAsync();
 
-			return await WithConnectApiHeaders($"{settings.Garmin.Api.PowerZonesUrl}/all", auth, settings.Garmin.Api)
+			return await WithConnectApiHeaders(settings.Garmin.Api.PowerZonesReadUrl, auth, settings.Garmin.Api)
 				.GetJsonAsync<ICollection<GarminPowerZones>>();
 		}
 
-		public async Task UpdatePowerZonesAsync(ICollection<GarminPowerZones> zones, GarminApiAuthentication auth)
+		public async Task UpdatePowerZonesAsync(GarminPowerZones zones, GarminApiAuthentication auth)
 		{
 			var settings = await _settingsService.GetSettingsAsync();
 
-			await WithConnectApiHeaders(settings.Garmin.Api.PowerZonesUrl, auth, settings.Garmin.Api)
-				.PutJsonAsync(zones);
+			await WithConnectApiHeaders(settings.Garmin.Api.PowerZonesSaveUrl, auth, settings.Garmin.Api)
+				.PutJsonAsync(new[] { zones });
 		}
 	}
 }

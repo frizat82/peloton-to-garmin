@@ -75,9 +75,8 @@ public class GarminFtpSyncService : IGarminFtpSyncService
 		{
 			_logger.Information("FTP sync: updating Garmin cycling FTP from {GarminFtp} to Peloton's {PelotonFtp}", cycling.FunctionalThresholdPower, ftp);
 			SetZones(cycling, ftp.Value);
-
-			// Send every sport back unchanged apart from cycling, so other sports' zones can't be lost.
-			await _apiClient.UpdatePowerZonesAsync(allZones, auth);
+			await _apiClient.UpdatePowerZonesAsync(cycling, auth);
+			_logger.Information("FTP sync: Garmin cycling FTP set to {Ftp}", ftp);
 		}
 
 		_confirmedFtp = ftp;

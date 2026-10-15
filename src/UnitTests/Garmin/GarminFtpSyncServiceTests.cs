@@ -30,7 +30,7 @@ namespace UnitTests.Garmin
 		{
 			public AutoMocker Mocker { get; } = new();
 			public GarminFtpSyncService Service { get; }
-			public ICollection<GarminPowerZones> Sent { get; private set; }
+			public List<GarminPowerZones> Sent { get; } = new();
 			private Mock<IGarminApiClient> Api => Mocker.GetMock<IGarminApiClient>();
 
 			public Fixture(List<GarminPowerZones> zones, bool syncFtp = true, bool upload = true, AuthStage auth = AuthStage.Completed)
@@ -40,30 +40,48 @@ namespace UnitTests.Garmin
 				Mocker.GetMock<IGarminAuthenticationService>().Setup(a => a.GetGarminAuthenticationAsync())
 					.ReturnsAsync(new GarminApiAuthentication { AuthStage = auth });
 				Api.Setup(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>())).ReturnsAsync(zones);
-				Api.Setup(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()))
-					.Callback((ICollection<GarminPowerZones> z, GarminApiAuthentication _) => Sent = z);
+				Api.Setup(c => c.UpdatePowerZonesAsync(It.IsAny<GarminPowerZones>(), It.IsAny<GarminApiAuthentication>()))
+					.Callback((GarminPowerZones z, GarminApiAuthentication _) => Sent.Add(z));
 				Service = Mocker.CreateInstance<GarminFtpSyncService>();
 			}
 
 			public void VerifyFetched(Times times) => Api.Verify(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>()), times);
-			public void VerifyNoUpdate() => Api.Verify(c => c.UpdatePowerZonesAsync(It.IsAny<ICollection<GarminPowerZones>>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
+			public void VerifyNoUpdate() => Api.Verify(c => c.UpdatePowerZonesAsync(It.IsAny<GarminPowerZones>(), It.IsAny<GarminApiAuthentication>()), Times.Never);
 		}
 
 		[Test]
-		public async Task Updates_CyclingFtpAndZones_AndKeepsOtherSports()
+		public async Task Updates_OnlyCycling_WithPelotonFtpAndZones()
 		{
 			var f = new Fixture(GarminZones());
 
 			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			f.Sent.Should().HaveCount(2);
-			var cycling = f.Sent.Single(z => z.Sport == Cycling);
+			var cycling = f.Sent.Should().ContainSingle().Which;
+			cycling.Sport.Should().Be(Cycling);
 			cycling.FunctionalThresholdPower.Should().Be(149);
 			new[] { cycling.Zone1Floor, cycling.Zone2Floor, cycling.Zone3Floor, cycling.Zone4Floor, cycling.Zone5Floor, cycling.Zone6Floor, cycling.Zone7Floor }
 				.Should().Equal(0, 82, 112, 134, 156, 179, 224);
-			var rowing = f.Sent.Single(z => z.Sport == "ROWING");
-			rowing.FunctionalThresholdPower.Should().Be(160);
-			rowing.Zone2Floor.Should().Be(88);
+		}
+
+		/// <summary>Garmin Connect's web app saves zones as an array holding one sport's object.</summary>
+		[Test]
+		public void SaveBody_IsOneSportInAnArray_WithGarminFieldNames()
+		{
+			var body = JsonSerializer.Serialize(new[] { GarminZones().First() });
+
+			body.Should().StartWith("[{\"sport\":\"CYCLING\",\"functionalThresholdPower\":200,\"zone1Floor\":0,\"zone2Floor\":110");
+		}
+
+		/// <summary>Saved settings from before this fix hold the wrong address under the old key; it must not be used.</summary>
+		[Test]
+		public void OldSavedSettings_UseTheVerifiedAddresses()
+		{
+			const string saved = "{\"Garmin\":{\"Api\":{\"PowerZonesUrl\":\"https://connectapi.garmin.com/biometric-service/powerZones/sports\"}}}";
+
+			var settings = Newtonsoft.Json.JsonConvert.DeserializeObject<Settings>(saved);
+
+			settings.Garmin.Api.PowerZonesReadUrl.Should().Be("https://connectapi.garmin.com/biometric-service/powerZones/sports/all");
+			settings.Garmin.Api.PowerZonesSaveUrl.Should().Be("https://connectapi.garmin.com/biometric-service/powerZones/all");
 		}
 
 		[Test]
@@ -73,7 +91,7 @@ namespace UnitTests.Garmin
 
 			await f.Service.SyncCyclingFtpAsync(new UserData { Cycling_Ftp_Source = CyclingFtpSource.Ftp_Manual_Source, Cycling_Ftp = 200 });
 
-			f.Sent.Single(z => z.Sport == Cycling).FunctionalThresholdPower.Should().Be(190);
+			f.Sent.Should().ContainSingle().Which.FunctionalThresholdPower.Should().Be(190);
 		}
 
 		[TestCase(149)]
