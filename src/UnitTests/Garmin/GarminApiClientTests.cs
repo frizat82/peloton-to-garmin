@@ -62,6 +62,21 @@ namespace UnitTests.Garmin
 			_httpTest.Dispose();
 		}
 
+		/// <summary>Matches Garmin Connect's web app: PUT /biometric-service/powerZones/all with an array holding one sport.</summary>
+		[Test]
+		public async Task UpdatePowerZonesAsync_PutsOneSportInAnArray_ToGarminsSaveAddress()
+		{
+			var auth = new GarminApiAuthentication { OAuth2Token = new OAuth2Token { Access_Token = "token" } };
+			var cycling = new GarminPowerZones { Sport = "CYCLING", FunctionalThresholdPower = 149, Zone1Floor = 0, Zone2Floor = 82, Zone3Floor = 112, Zone4Floor = 134, Zone5Floor = 156, Zone6Floor = 179, Zone7Floor = 224 };
+
+			await _apiClient.UpdatePowerZonesAsync(cycling, auth);
+
+			_httpTest.ShouldHaveCalled("https://connectapi.garmin.com/biometric-service/powerZones/all")
+				.WithVerb(HttpMethod.Put)
+				.With(call => call.RequestBody.StartsWith("[{\"sport\":\"CYCLING\",\"functionalThresholdPower\":149,\"zone1Floor\":0,\"zone2Floor\":82"))
+				.Times(1);
+		}
+
 		[Test]
 		public async Task GetConsumerCredentialsAsync_ShouldReturnValidCredentials()
 		{

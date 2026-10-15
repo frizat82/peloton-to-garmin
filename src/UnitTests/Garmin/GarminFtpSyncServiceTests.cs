@@ -9,6 +9,7 @@ using Moq;
 using Moq.AutoMock;
 using NUnit.Framework;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -63,25 +64,45 @@ namespace UnitTests.Garmin
 				.Should().Equal(0, 82, 112, 134, 156, 179, 224);
 		}
 
-		/// <summary>Garmin Connect's web app saves zones as an array holding one sport's object.</summary>
+		/// <summary>A save Garmin accepts but doesn't apply must not be reported or remembered as done.</summary>
 		[Test]
-		public void SaveBody_IsOneSportInAnArray_WithGarminFieldNames()
+		public async Task SaveThatGarminDoesNotApply_IsNotTrusted()
 		{
-			var body = JsonSerializer.Serialize(new[] { GarminZones().First() });
+			var f = new Fixture(GarminZones());
+			// Every read returns a fresh copy still at 200, as if the save was ignored.
+			f.Mocker.GetMock<IGarminApiClient>().Setup(c => c.GetPowerZonesAsync(It.IsAny<GarminApiAuthentication>())).ReturnsAsync(() => GarminZones());
 
-			body.Should().StartWith("[{\"sport\":\"CYCLING\",\"functionalThresholdPower\":200,\"zone1Floor\":0,\"zone2Floor\":110");
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
+			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
+
+			// Read, save, read back, on both runs: the unconfirmed FTP isn't cached.
+			f.Sent.Should().HaveCount(2);
+			f.VerifyFetched(Times.Exactly(4));
 		}
 
-		/// <summary>Saved settings from before this fix hold the wrong address under the old key; it must not be used.</summary>
+		/// <summary>Settings saved before this fix hold the wrong save address under an old key; loading them must not use it.</summary>
 		[Test]
-		public void OldSavedSettings_UseTheVerifiedAddresses()
+		public async Task OldSavedSettings_LoadWithCurrentAddresses()
 		{
-			const string saved = "{\"Garmin\":{\"Api\":{\"PowerZonesUrl\":\"https://connectapi.garmin.com/biometric-service/powerZones/sports\"}}}";
+			var dataDir = Path.Join(Path.GetTempPath(), $"p2g_settings_{System.Guid.NewGuid():N}");
+			Directory.CreateDirectory(dataDir);
+			File.WriteAllText(Path.Join(dataDir, "SettingsDb.json"),
+				"{\"1\":{\"garmin\":{\"api\":{\"powerZonesUrl\":\"https://connectapi.garmin.com/biometric-service/powerZones/sports\"}}}}");
+			var original = global::Common.Stateful.Statics.DefaultDataDirectory;
+			try
+			{
+				global::Common.Stateful.Statics.DefaultDataDirectory = dataDir;
+				var settings = await new global::Common.Database.SettingsDb(new global::Common.IOWrapper()).GetSettingsAsync(1);
 
-			var settings = Newtonsoft.Json.JsonConvert.DeserializeObject<Settings>(saved);
-
-			settings.Garmin.Api.PowerZonesReadUrl.Should().Be("https://connectapi.garmin.com/biometric-service/powerZones/sports/all");
-			settings.Garmin.Api.PowerZonesSaveUrl.Should().Be("https://connectapi.garmin.com/biometric-service/powerZones/all");
+				var defaults = new GarminApiSettings();
+				settings.Garmin.Api.PowerZonesReadUrl.Should().Be(defaults.PowerZonesReadUrl);
+				settings.Garmin.Api.PowerZonesSaveUrl.Should().Be(defaults.PowerZonesSaveUrl);
+			}
+			finally
+			{
+				global::Common.Stateful.Statics.DefaultDataDirectory = original;
+				Directory.Delete(dataDir, recursive: true);
+			}
 		}
 
 		[Test]
@@ -113,7 +134,8 @@ namespace UnitTests.Garmin
 			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 			await f.Service.SyncCyclingFtpAsync(TestedFtp149);
 
-			f.VerifyFetched(Times.Once());
+			// The first run reads, saves and reads back; the second trusts the confirmed FTP.
+			f.VerifyFetched(Times.Exactly(2));
 		}
 
 		[Test]
