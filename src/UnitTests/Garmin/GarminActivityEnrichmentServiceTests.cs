@@ -210,6 +210,27 @@ namespace UnitTests.Garmin
 		}
 
 		[Test]
+		public async Task EnrichAsync_YogaClassStackedWithPilates_StaysYoga()
+		{
+			var mocker = new AutoMocker();
+			var service = mocker.CreateInstance<GarminActivityEnrichmentService>();
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(BuildSettings());
+			mocker.GetMock<IGarminAuthenticationService>()
+				.Setup(a => a.GetGarminAuthenticationAsync())
+				.ReturnsAsync(new GarminApiAuthentication { AuthStage = AuthStage.Completed });
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { BuildActivity(activityId: 99, typeKey: "yoga") });
+			var pilates = BuildClass("15 min Pilates");
+			var yoga = BuildClass("10 min Yoga Flow");
+			yoga.Workout = yoga.Workout with { Id = "workout2" };
+
+			await service.EnrichAsync(new[] { pilates, yoga });
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(99, It.Is<GarminActivityUpdateRequest>(r => r.ActivityType == null), It.IsAny<GarminApiAuthentication>()), Times.Once);
+		}
+
+		[Test]
 		public async Task EnrichAsync_When_SearchThrows_Continues_And_Returns_EmptyList()
 		{
 			var mocker = new AutoMocker();
@@ -292,10 +313,6 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(NewActivityId, It.IsAny<GarminActivityUpdateRequest>(), It.IsAny<GarminApiAuthentication>()), Times.Once);
 		}
 
-		/// <summary>
-		/// Right after the delete, Garmin can refuse the merged FIT as a duplicate of the activity it is still
-		/// deleting. That must not count as success: P2G waits and uploads again.
-		/// </summary>
 		[Test]
 		public async Task FitMerge_PilatesClassRecordedAsYoga_ChangesTheMergedActivityToPilates()
 		{
@@ -306,6 +323,10 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(NewActivityId, It.Is<GarminActivityUpdateRequest>(r => r.ActivityType.TypeId == 160 && r.ActivityType.TypeKey == "pilates"), It.IsAny<GarminApiAuthentication>()), Times.Once);
 		}
 
+		/// <summary>
+		/// Right after the delete, Garmin can refuse the merged FIT as a duplicate of the activity it is still
+		/// deleting. That must not count as success: P2G waits and uploads again.
+		/// </summary>
 		[Test]
 		public async Task FitMerge_WhenGarminRejectsAsDuplicate_UploadsAgain()
 		{

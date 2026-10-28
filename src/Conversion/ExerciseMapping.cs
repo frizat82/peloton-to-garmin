@@ -84,8 +84,8 @@ public static class ExerciseMapping
 		/* Devil's Press */ { "41c0d7385ac54add8d22f035b92e588a", new (ExerciseCategory.TotalBody, TotalBodyExerciseName.WeightedBurpee) },
 		/* Diagonal Chop */ { "eef5db32dd88452090257cf52e22f34e", new (ExerciseCategory.Chop, ChopExerciseName.DumbbellChop) },
 		/* Double Leg Stretch */ { "c25b2d80207541eca30ddd2c3a4e49ea", new (ExerciseCategory.Core, CoreExerciseName.DoubleLegStretch) },
-		/* Downward Facing Dog Pose */ { "a8f5f9d4189b4692aa6f5e15f6e040b6", new (ExerciseCategory.Pose, PoseExerciseName.DownwardFacingDog) },
 		/* Double Straight Leg Stretch */ { "cd97793973cd4a7cb722d9c8e97b6551", new (ExerciseCategory.Core, CoreExerciseName.DoubleLegStretch) },
+		/* Downward Facing Dog Pose */ { "a8f5f9d4189b4692aa6f5e15f6e040b6", new (ExerciseCategory.Pose, PoseExerciseName.DownwardFacingDog) },
 		/* Drop Squat */ { "0e51c00d86994e6e8626d27a0716f408", new (ExerciseCategory.Squat, SquatExerciseName.Squat) },
 		/* Dumbbell Lat Pull Over */ { "25f1731b59e040989452ff1598991340", new (ExerciseCategory.PullUp, PullUpExerciseName.EzBarPullover) },
 		/* Dumbbell Pushup */ { "ce8c746fb5224e9dbc401fef0013a54f", new (ExerciseCategory.PushUp, PushUpExerciseName.PushUp) },
@@ -173,8 +173,8 @@ public static class ExerciseMapping
 		// O
 		/* Oblique Crunch */ { "f52100cb5df44c7795ac9d7a09e4d0b9", new (ExerciseCategory.Crunch, CrunchExerciseName.BicycleCrunch) },
 		/* Oblique Heel Tap */ { "d5ec25fe793f4318a6891607bd3c9259", new (ExerciseCategory.Crunch, CoreExerciseName.SideBend) },
-		/* Offset Squat */ { "e95ba17532ec483b802f670477a0e1da", new (ExerciseCategory.Squat, SquatExerciseName.DumbbellSquat) },
 		/* Offset Push Up */ { "b5d8c5e2e78c49d497f67b03e39e9582", new (ExerciseCategory.PushUp, PushUpExerciseName.PushUp) },
+		/* Offset Squat */ { "e95ba17532ec483b802f670477a0e1da", new (ExerciseCategory.Squat, SquatExerciseName.DumbbellSquat) },
 		/* Open Lateral Raise */ { "00046ee377554425866b0a1963b98589", new (ExerciseCategory.LateralRaise, LateralRaiseExerciseName.SeatedLateralRaise) },
 		/* Overhead Carry */ { "12057d5f9e144913a824bcae5706966c", new (ExerciseCategory.Carry, CarryExerciseName.OverheadCarry) },
 		/* Overhead Extension */ { "f260623343e74d37b165071ee5903199", new (ExerciseCategory.TricepsExtension, TricepsExtensionExerciseName.OverheadDumbbellTricepsExtension) },
@@ -206,9 +206,9 @@ public static class ExerciseMapping
 		/* Romanian Deadlift */ { "a17b8d35d1264a2fbabe3ab28df458dc", new (ExerciseCategory.Deadlift, DeadliftExerciseName.DumbbellDeadlift) },// RDL exists in Connect but not in SDK definition
 		/* Runners Lunge */ { "3ca0b431086245a4b896b5a3f97f316f", new (ExerciseCategory.Lunge, LungeExerciseName.RunnersLungeToBalance) },
 		/* Russian Twist */ { "5c7b2bc65abc4c44849e2119f1338120", new (ExerciseCategory.Core, CoreExerciseName.RussianTwist) },
-		/* Saw */ { "0f11c916790b4f27b86151cd3776cde5", new (ExerciseCategory.Move, MoveExerciseName.Saw) },
 
 		// S
+		/* Saw */ { "0f11c916790b4f27b86151cd3776cde5", new (ExerciseCategory.Move, MoveExerciseName.Saw) },
 		/* Scissor Kick */ { "f6a10df381004afba2a2b63447d9968f", new (ExerciseCategory.Crunch, CrunchExerciseName.LegLevers) },
 		/* Scissors */ { "0f9b2d6f18b247bd950d60bbbefd19f3", new (ExerciseCategory.Crunch, CrunchExerciseName.LegLevers) },
 		/* Seated Crunch */ { "440c5623e95c4b7ca3dc57ff61be349a", new (ExerciseCategory.Crunch, CrunchExerciseName.Crunch) },

@@ -205,7 +205,7 @@ public class PelotonAuthApiClient : IPelotonAuthApiClient
 		// device on the same public IP, so a P2G server on that network stops syncing too. Retrying keeps it in
 		// place; wait for it to clear (or use Peloton's unblock email) and sign in once.
 		if (response.StatusCode == (int)HttpStatusCode.TooManyRequests)
-			throw new PelotonAuthenticationError($"Peloton blocked sign-in after too many recent login attempts (HTTP 429). Stop retrying and wait for the block to clear. Peloton response: {bodyText}");
+			throw new PelotonAuthenticationError($"Peloton blocked sign-in after too many recent login attempts (HTTP 429). Stop retrying and wait for the block to clear. Peloton response: {bodyText[..Math.Min(bodyText.Length, 300)]}");
 
 		var (actionNext, hiddenFields) = ParseHiddenForm(bodyText);
 
