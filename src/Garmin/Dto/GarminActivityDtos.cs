@@ -25,6 +25,15 @@ public class GarminActivitySummary
 
 public class GarminActivityType
 {
+	public const string YogaKey = "yoga";
+	public const string PilatesKey = "pilates";
+
+	/// <summary>Garmin Connect's Pilates activity type.</summary>
+	public static GarminActivityType Pilates => new() { TypeId = 160, TypeKey = PilatesKey };
+
+	[JsonPropertyName("typeId")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public int? TypeId { get; set; }
 	[JsonPropertyName("typeKey")]
 	public string TypeKey { get; set; }
 }
@@ -39,6 +48,10 @@ public class GarminActivityUpdateRequest
 	[JsonPropertyName("description")]
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 	public string Description { get; set; }
+	/// <summary>Changes the activity's type, e.g. a yoga recording to Pilates.</summary>
+	[JsonPropertyName("activityTypeDTO")]
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+	public GarminActivityType ActivityType { get; set; }
 	/// <summary>Distance in meters.</summary>
 	[JsonPropertyName("distance")]
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -119,6 +132,7 @@ public class GarminEnrichmentResult
 	public string PelotonWorkoutTitle { get; set; }
 	public long GarminActivityId { get; set; }
 	public string GarminActivityName { get; set; }
+	public string GarminActivityTypeKey { get; set; }
 	public DateTime? GarminActivityStartTimeUtc { get; set; }
 	public double MatchDeltaSeconds { get; set; }
 	public bool HasMatch { get; set; }

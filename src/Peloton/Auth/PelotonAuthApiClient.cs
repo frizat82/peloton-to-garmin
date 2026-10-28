@@ -198,6 +198,19 @@ public class PelotonAuthApiClient : IPelotonAuthApiClient
 
 		// Parse hidden form from response
 		var bodyText = await response.GetStringAsync();
+
+		// Peloton's sign-in blocks the network after a handful of fresh logins in a short time and answers 429
+		// {"code":"too_many_attempts","description":"We have detected suspicious login behavior..."}. That reply
+		// has no form, so without this check it surfaces as "Hidden form had no action". The block covers every
+		// device on the same public IP, so a P2G server on that network stops syncing too. Retrying keeps it in
+		// place; wait for it to clear (or use Peloton's unblock email) and sign in once.
+		if (response.StatusCode == (int)HttpStatusCode.TooManyRequests)
+			throw new PelotonAuthenticationError($"Peloton blocked sign-in after too many recent login attempts (HTTP 429). Stop retrying and wait for the block to clear. Peloton response: {Truncate(bodyText, 300)}");
+
+		// Any other rejection also has no form to follow.
+		if (response.StatusCode >= 400)
+			throw new PelotonAuthenticationError($"Peloton rejected the sign-in with HTTP {response.StatusCode}. Peloton response: {Truncate(bodyText, 300)}");
+
 		var (actionNext, hiddenFields) = ParseHiddenForm(bodyText);
 
 		return await SubmitHiddenFormAsync(actionNext, hiddenFields, config);

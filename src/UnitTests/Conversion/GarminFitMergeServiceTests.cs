@@ -376,6 +376,8 @@ public class GarminFitMergeServiceTests
 	private const string ArnoldPressId = "01251235527748368069f9dc898aadf3";
 	private const string ArmCirclesId = "1b3400e0aade45e58d2f42cf19af0f40";
 	private const string RestId = "3ca251f6d68746ad91aebea5c89694ca";
+	private const string TickTockId = "ec8415d086fc4646a51878f47dd03e8a";
+	private const string RollUpId = "0b853e45afb04c31968b20fc7deaa718";
 
 	private static byte[] BuildStrengthFitWithWatchSet(System.DateTime start, SubSport subSport = SubSport.StrengthTraining)
 	{
@@ -480,8 +482,27 @@ public class GarminFitMergeServiceTests
 		FitTestHelper.DecodeSets(merged).Should().ContainSingle().Which.GetCategory(0).Should().Be(ExerciseCategory.PullUp);
 	}
 
+	[TestCase(SubSport.Yoga)]
+	[TestCase(SubSport.Pilates)]
+	public void ExerciseSets_ReplaceWatchSets_OnYogaAndPilatesActivities(SubSport subSport)
+	{
+		var start = System.DateTime.UtcNow.AddMinutes(-30);
+		var exercises = new List<P2GExercise>
+		{
+			new() { Id = TickTockId, Name = "Tick Tock", StartOffsetSeconds = 0, DurationSeconds = 30, Type = MovementTargetType.Time },
+			new() { Id = RollUpId, Name = "Roll Up", StartOffsetSeconds = 30, DurationSeconds = 30, Type = MovementTargetType.Time },
+		};
+
+		var merged = GarminFitMergeService.MergeWatchFitWithPeloton(BuildStrengthFitWithWatchSet(start, subSport), BuildSamples(cadenceSlug: null, speedKph: null), new DateTimeOffset(start).ToUnixTimeSeconds(), exercises: exercises);
+
+		var sets = FitTestHelper.DecodeSets(merged);
+		sets.Select(s => (s.GetCategory(0), s.GetCategorySubtype(0))).Should().Equal(
+			(ExerciseCategory.Move, MoveExerciseName.TickTockSideRoll),
+			(ExerciseCategory.Core, CoreExerciseName.RollUp));
+	}
+
 	[Test]
-	public void ExerciseSets_NotAdded_WhenWatchActivityIsNotStrength()
+	public void ExerciseSets_NotAdded_WhenWatchActivityHasNoExerciseList()
 	{
 		var start = System.DateTime.UtcNow.AddMinutes(-30);
 		var exercises = new List<P2GExercise>

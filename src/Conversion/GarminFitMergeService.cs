@@ -68,7 +68,7 @@ public static class GarminFitMergeService
 		if (includeTimeInPowerZones && isCycling && workout is not null)
 			InjectPowerZones(mergedMessages, workout, pelotonSamples);
 
-		if (sessionSubSport == SubSport.StrengthTraining)
+		if (ExerciseSets.AppliesTo(sessionSubSport))
 			InjectExerciseSets(mergedMessages, exercises, workoutStartUnix, defaultSecondsPerRep);
 
 		return EncodeMessages(mergedMessages);
@@ -412,7 +412,7 @@ public static class GarminFitMergeService
 	/// Replaces the watch's exercise sets with the Peloton class's exercises so Garmin
 	/// lists the class's lifts and builds its muscle map from them. The watch's own sets
 	/// come from rep detection and rarely match the class. Without any mappable Peloton
-	/// exercises, the watch's sets are left alone. Only strength activities get sets.
+	/// exercises, the watch's sets are left alone. Only strength, yoga and Pilates activities get sets.
 	/// </summary>
 	private static void InjectExerciseSets(List<Mesg> messages, ICollection<P2GExercise> exercises, long workoutStartUnix, int defaultSecondsPerRep)
 	{
