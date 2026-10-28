@@ -197,6 +197,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 					PelotonWorkoutTitle = workoutTitle,
 					GarminActivityId = match.Value.Activity.ActivityId,
 					GarminActivityName = match.Value.Activity.ActivityName,
+					GarminActivityTypeKey = match.Value.Activity.ActivityType?.TypeKey,
 					GarminActivityStartTimeUtc = garminStartUtc == default ? null : garminStartUtc,
 					MatchDeltaSeconds = match.Value.DeltaSeconds,
 					HasMatch = true,
@@ -263,6 +264,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			{
 				ActivityId = garminActivityId,
 				ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
+				ActivityType = PilatesTypeFor(primary),
 				Description = group.Count == 1
 					? BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples)
 					: BuildCombinedDescription(group.Select(g => g.P2GWorkout)),
@@ -381,6 +383,7 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 			ActivityId = newActivityId.Value,
 			ActivityName = BuildActivityName(primary.P2GWorkout.Workout),
 			Description = BuildDescription(primary.P2GWorkout.Workout, primary.P2GWorkout.WorkoutSamples),
+			ActivityType = PilatesTypeFor(primary),
 		};
 		try
 		{
@@ -528,6 +531,17 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 		return true;
 	}
 
+
+	/// <summary>
+	/// Watches without a Pilates activity record Peloton Pilates classes as yoga. Garmin Connect has a Pilates type,
+	/// set through the activity update; a FIT file marked Pilates is imported as strength training instead.
+	/// </summary>
+	private static GarminActivityType PilatesTypeFor((P2GWorkout P2GWorkout, GarminEnrichmentResult Result) primary)
+	{
+		var classTitle = primary.P2GWorkout.Workout.Ride?.Title ?? primary.P2GWorkout.Workout.Title;
+		var isPilatesClass = classTitle?.Contains("Pilates", StringComparison.OrdinalIgnoreCase) == true;
+		return isPilatesClass && primary.Result.GarminActivityTypeKey == GarminActivityType.YogaKey ? GarminActivityType.Pilates : null;
+	}
 
 	private static GarminEnrichmentResult NoMatchResult(Workout workout) => new GarminEnrichmentResult
 	{

@@ -36,13 +36,13 @@ namespace UnitTests.Garmin
 			};
 		}
 
-		private static GarminActivitySummary BuildActivity(long activityId = 12345, string startGmt = null)
+		private static GarminActivitySummary BuildActivity(long activityId = 12345, string startGmt = null, string typeKey = "cycling")
 		{
 			return new GarminActivitySummary
 			{
 				ActivityId = activityId,
 				StartTimeGMT = startGmt ?? GarminStartGmt,
-				ActivityType = new GarminActivityType { TypeKey = "cycling" },
+				ActivityType = new GarminActivityType { TypeKey = typeKey },
 			};
 		}
 
@@ -182,6 +182,33 @@ namespace UnitTests.Garmin
 				r.Source == MergeSource.Auto)), Times.Once);
 		}
 
+		private static P2GWorkout BuildClass(string title)
+		{
+			var workout = BuildWorkout();
+			workout.Workout = workout.Workout with { Fitness_Discipline = FitnessDiscipline.Strength, Ride = new Ride { Title = title } };
+			return workout;
+		}
+
+		[TestCase("15 min Pilates: Express", "yoga", "pilates")]
+		[TestCase("20 min Yoga Flow", "yoga", null)]
+		[TestCase("15 min Pilates", "strength_training", null)]
+		public async Task EnrichAsync_PilatesClassRecordedAsYoga_IsChangedToPilates(string classTitle, string watchTypeKey, string expectedTypeKey)
+		{
+			var mocker = new AutoMocker();
+			var service = mocker.CreateInstance<GarminActivityEnrichmentService>();
+			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(BuildSettings());
+			mocker.GetMock<IGarminAuthenticationService>()
+				.Setup(a => a.GetGarminAuthenticationAsync())
+				.ReturnsAsync(new GarminApiAuthentication { AuthStage = AuthStage.Completed });
+			mocker.GetMock<IGarminApiClient>()
+				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
+				.ReturnsAsync(new List<GarminActivitySummary> { BuildActivity(activityId: 99, typeKey: watchTypeKey) });
+
+			await service.EnrichAsync(new[] { BuildClass(classTitle) });
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(99, It.Is<GarminActivityUpdateRequest>(r => (r.ActivityType == null ? null : r.ActivityType.TypeKey) == expectedTypeKey), It.IsAny<GarminApiAuthentication>()), Times.Once);
+		}
+
 		[Test]
 		public async Task EnrichAsync_When_SearchThrows_Continues_And_Returns_EmptyList()
 		{
@@ -211,7 +238,7 @@ namespace UnitTests.Garmin
 		private static readonly byte[] WatchFit = File.ReadAllBytes(Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "Data", "Fenix_Incline.fit"));
 
 		private static (AutoMocker Mocker, GarminActivityEnrichmentService Service, List<byte[]> Uploads) BuildMerge(
-			int? visibleAfterUploads, Func<int, UploadResponse> respond = null)
+			int? visibleAfterUploads, Func<int, UploadResponse> respond = null, string watchTypeKey = "cycling")
 		{
 			var mocker = new AutoMocker();
 			var service = mocker.CreateInstance<GarminActivityEnrichmentService>();
@@ -228,8 +255,8 @@ namespace UnitTests.Garmin
 			var api = mocker.GetMock<IGarminApiClient>();
 			api.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
 				.ReturnsAsync(() => visibleAfterUploads is not null && uploads.Count >= visibleAfterUploads
-					? new List<GarminActivitySummary> { BuildActivity(WatchActivityId), BuildActivity(NewActivityId) }
-					: new List<GarminActivitySummary> { BuildActivity(WatchActivityId) });
+					? new List<GarminActivitySummary> { BuildActivity(WatchActivityId, typeKey: watchTypeKey), BuildActivity(NewActivityId, typeKey: watchTypeKey) }
+					: new List<GarminActivitySummary> { BuildActivity(WatchActivityId, typeKey: watchTypeKey) });
 
 			// Use a real FIT file so MergeWatchFitWithPeloton doesn't throw before reaching delete
 			api.Setup(c => c.DownloadActivityFitAsync(WatchActivityId, It.IsAny<GarminApiAuthentication>()))
@@ -269,6 +296,16 @@ namespace UnitTests.Garmin
 		/// Right after the delete, Garmin can refuse the merged FIT as a duplicate of the activity it is still
 		/// deleting. That must not count as success: P2G waits and uploads again.
 		/// </summary>
+		[Test]
+		public async Task FitMerge_PilatesClassRecordedAsYoga_ChangesTheMergedActivityToPilates()
+		{
+			var (mocker, service, _) = BuildMerge(visibleAfterUploads: 1, watchTypeKey: "yoga");
+
+			await service.EnrichAsync(new[] { BuildClass("15 min Pilates: Express") });
+
+			mocker.GetMock<IGarminApiClient>().Verify(c => c.UpdateActivityAsync(NewActivityId, It.Is<GarminActivityUpdateRequest>(r => r.ActivityType.TypeId == 160 && r.ActivityType.TypeKey == "pilates"), It.IsAny<GarminApiAuthentication>()), Times.Once);
+		}
+
 		[Test]
 		public async Task FitMerge_WhenGarminRejectsAsDuplicate_UploadsAgain()
 		{
