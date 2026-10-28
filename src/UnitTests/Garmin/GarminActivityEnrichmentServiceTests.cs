@@ -189,10 +189,8 @@ namespace UnitTests.Garmin
 			return workout;
 		}
 
-		[TestCase("15 min Pilates: Express", "yoga", "pilates")]
-		[TestCase("20 min Yoga Flow", "yoga", null)]
-		[TestCase("15 min Pilates", "strength_training", null)]
-		public async Task EnrichAsync_PilatesClassRecordedAsYoga_IsChangedToPilates(string classTitle, string watchTypeKey, string expectedTypeKey)
+		/// <summary>The settings, sign-in and search for enriching one watch activity (id 99) of the given Garmin type.</summary>
+		private static (AutoMocker Mocker, GarminActivityEnrichmentService Service) BuildEnrich(string watchTypeKey)
 		{
 			var mocker = new AutoMocker();
 			var service = mocker.CreateInstance<GarminActivityEnrichmentService>();
@@ -203,6 +201,15 @@ namespace UnitTests.Garmin
 			mocker.GetMock<IGarminApiClient>()
 				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
 				.ReturnsAsync(new List<GarminActivitySummary> { BuildActivity(activityId: 99, typeKey: watchTypeKey) });
+			return (mocker, service);
+		}
+
+		[TestCase("15 min Pilates: Express", "yoga", "pilates")]
+		[TestCase("20 min Yoga Flow", "yoga", null)]
+		[TestCase("15 min Pilates", "strength_training", null)]
+		public async Task EnrichAsync_PilatesClassRecordedAsYoga_IsChangedToPilates(string classTitle, string watchTypeKey, string expectedTypeKey)
+		{
+			var (mocker, service) = BuildEnrich(watchTypeKey);
 
 			await service.EnrichAsync(new[] { BuildClass(classTitle) });
 
@@ -212,15 +219,7 @@ namespace UnitTests.Garmin
 		[Test]
 		public async Task EnrichAsync_YogaClassStackedWithPilates_StaysYoga()
 		{
-			var mocker = new AutoMocker();
-			var service = mocker.CreateInstance<GarminActivityEnrichmentService>();
-			mocker.GetMock<ISettingsService>().Setup(s => s.GetSettingsAsync()).ReturnsAsync(BuildSettings());
-			mocker.GetMock<IGarminAuthenticationService>()
-				.Setup(a => a.GetGarminAuthenticationAsync())
-				.ReturnsAsync(new GarminApiAuthentication { AuthStage = AuthStage.Completed });
-			mocker.GetMock<IGarminApiClient>()
-				.Setup(c => c.SearchActivitiesAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<GarminApiAuthentication>()))
-				.ReturnsAsync(new List<GarminActivitySummary> { BuildActivity(activityId: 99, typeKey: "yoga") });
+			var (mocker, service) = BuildEnrich("yoga");
 			var pilates = BuildClass("15 min Pilates");
 			var yoga = BuildClass("10 min Yoga Flow");
 			yoga.Workout = yoga.Workout with { Id = "workout2" };

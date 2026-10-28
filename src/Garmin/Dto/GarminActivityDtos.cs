@@ -26,9 +26,10 @@ public class GarminActivitySummary
 public class GarminActivityType
 {
 	public const string YogaKey = "yoga";
+	public const string PilatesKey = "pilates";
 
 	/// <summary>Garmin Connect's Pilates activity type.</summary>
-	public static GarminActivityType Pilates => new() { TypeId = 160, TypeKey = "pilates" };
+	public static GarminActivityType Pilates => new() { TypeId = 160, TypeKey = PilatesKey };
 
 	[JsonPropertyName("typeId")]
 	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

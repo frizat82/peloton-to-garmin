@@ -538,10 +538,8 @@ public class GarminActivityEnrichmentService : IGarminActivityEnrichmentService
 	/// </summary>
 	private static GarminActivityType PilatesTypeFor(List<(P2GWorkout P2GWorkout, GarminEnrichmentResult Result)> group)
 	{
-		static bool IsPilatesClass(Workout w) => (w.Ride?.Title ?? w.Title)?.Contains("Pilates", StringComparison.OrdinalIgnoreCase) == true;
-
 		// Every class on the activity must be Pilates, so a yoga class stacked with a Pilates one stays yoga.
-		var allPilates = group.All(g => IsPilatesClass(g.P2GWorkout.Workout));
+		var allPilates = group.All(g => g.Result.PelotonWorkoutTitle?.Contains("Pilates", StringComparison.OrdinalIgnoreCase) == true);
 		return allPilates && group[0].Result.GarminActivityTypeKey == GarminActivityType.YogaKey ? GarminActivityType.Pilates : null;
 	}
 
