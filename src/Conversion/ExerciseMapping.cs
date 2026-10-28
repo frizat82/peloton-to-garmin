@@ -49,6 +49,8 @@ public static class ExerciseMapping
 		/* Boat Pose */ { "adbac11d3b714403ba22a175a8c95837", new (ExerciseCategory.Crunch, CrunchExerciseName.HollowRock) },
 		/* Body Weight Squat */ { "46d30aa1a4a245ada8a5e5ff8f3e7662", new (ExerciseCategory.Squat, SquatExerciseName.Squat) },
 		/* Bridge & Reach */ { "0bec94a04d494c7f839a340ee5b323bf", new (ExerciseCategory.HipRaise, HipRaiseExerciseName.HipRaise) },
+		/* Bridge Pose */ { "3b2cb5aa464343548f699d0f328efa03", new (ExerciseCategory.Pose, PoseExerciseName.Bridge) },
+		/* Bridge Series */ { "51b07b61554a463dbefff2bbe9447945", new (ExerciseCategory.HipRaise, HipRaiseExerciseName.HipRaise) },
 		/* Bridge Walkout */ { "d55d9db0c9dc447bb146527391b54e53", new (ExerciseCategory.HipRaise, HipRaiseExerciseName.HipRaise) },
 		/* Bridging Clamshell */ { "54fb04d9748b4be0a25a47b9fba168e9", new (ExerciseCategory.HipRaise, HipRaiseExerciseName.ClamBridge) },
 		/* Burpee */ { "879f28669dd14f80b2f4f29e3e316d61", new (ExerciseCategory.TotalBody, TotalBodyExerciseName.Burpee) },
@@ -61,6 +63,7 @@ public static class ExerciseMapping
 		/* Chest Fly */ { "45207949aa384783b5d71451f7fe1c3d", new (ExerciseCategory.Flye, FlyeExerciseName.DumbbellFlye) },
 		/* Clam Shell */ { "5749daaf9be3448397af9d813d760ff3", new (ExerciseCategory.HipRaise, HipRaiseExerciseName.Clams) },
 		/* Clean */ { "f2a28d3ebf3c4844a704d2b94e283099", new (ExerciseCategory.OlympicLift, OlympicLiftExerciseName.DumbbellClean) },
+		/* Cobra Pose */ { "81b78f8813284c1eac1190cc5bad24b4", new (ExerciseCategory.Hyperextension, HyperextensionExerciseName.Cobra) },
 		/* Concentrated Curl */ { "3695ef0ec2ce484faedc8ce2bfa2819d", new (ExerciseCategory.Curl, CurlExerciseName.SeatedDumbbellBicepsCurl) },
 		/* Copenhagen Plank */ { "7f71e09975e345ebaf71d8db2c726a0f", new (ExerciseCategory.Plank, PlankExerciseName.SidePlank) },
 		/* Crab Reach */ { "cf16f941fc4b4baaa2f72f13cd6b8359", new (ExerciseCategory.Plank, PlankExerciseName.LyingReversePlank) },
@@ -76,6 +79,7 @@ public static class ExerciseMapping
 		/* Deadlift */ { "cd6046306b2c4c4a8f40e169ec924eb9", new (ExerciseCategory.Deadlift, DeadliftExerciseName.DumbbellDeadlift) },
 		/* Devil's Press */ { "41c0d7385ac54add8d22f035b92e588a", new (ExerciseCategory.TotalBody, TotalBodyExerciseName.WeightedBurpee) },
 		/* Diagonal Chop */ { "eef5db32dd88452090257cf52e22f34e", new (ExerciseCategory.Chop, ChopExerciseName.DumbbellChop) },
+		/* Double Leg Stretch */ { "c25b2d80207541eca30ddd2c3a4e49ea", new (ExerciseCategory.Core, CoreExerciseName.DoubleLegStretch) },
 		/* Double Straight Leg Stretch */ { "cd97793973cd4a7cb722d9c8e97b6551", new (ExerciseCategory.Core, CoreExerciseName.DoubleLegStretch) },
 		/* Drop Squat */ { "0e51c00d86994e6e8626d27a0716f408", new (ExerciseCategory.Squat, SquatExerciseName.Squat) },
 		/* Dumbbell Lat Pull Over */ { "25f1731b59e040989452ff1598991340", new (ExerciseCategory.PullUp, PullUpExerciseName.EzBarPullover) },
@@ -90,6 +94,7 @@ public static class ExerciseMapping
 		/* Dolphin */ { "843d434f59f941c0826fc0fe15eb0236", new (ExerciseCategory.Plank, PlankExerciseName.PlankPikes) },
 
 		// F
+		/* Farmer Carry */ { "88a2dd78ed254240bce4f2b7f1a2c75e", new (ExerciseCategory.Carry, CarryExerciseName.FarmersCarry) },
 		/* Flutter Kick */ { "6091566fa0674afd96a22fcec3ab18ce", new (ExerciseCategory.Crunch, CrunchExerciseName.FlutterKicks) },
 		/* Forearm Side Plank */ { "1c0403c4d7264d83b1c75d18c8cdac4f", new (ExerciseCategory.Plank, PlankExerciseName.SidePlank) },
 		/* Forearm Side Plank Hip Dip */ { "a395acf0dd27412888494c990c4774f6", new (ExerciseCategory.Plank, PlankExerciseName.SidePlankLift) },
@@ -137,17 +142,22 @@ public static class ExerciseMapping
 
 		// L
 		/* Lateral Lunge */ { "fb63e1ea19264145ae6856eefacbcb22", new (ExerciseCategory.Lunge, LungeExerciseName.SlidingLateralLunge)},
+		/* Lateral Bear Crawl */ { "f0fea2eeb5f247be85859207af1e48ea", new (ExerciseCategory.Plank, PlankExerciseName.BearCrawl) },
 		/* Lateral Squat */ { "db1b398cc76c4093b1124a4e2d2748a9", new (ExerciseCategory.Lunge, LungeExerciseName.SideLunge) },
 		/* Lawn Mower Row */ { "c80ac3adb6f74487808f361876ba326c", new (ExerciseCategory.Row, RowExerciseName.OneArmBentOverRow)},
 		/* Lateral Raise */ { "2635cbe093a140e0be83be83fa594d8b", new (ExerciseCategory.LateralRaise, LateralRaiseExerciseName.SeatedLateralRaise)},
+		/* Lateral Leg Lift */ { "1b087d2dd8964130b803754354c47c90", new (ExerciseCategory.HipStability, HipStabilityExerciseName.SideLyingLegRaise) },
 		/* Leg Circles */ { "fc0415faa765462e985abd17ffd2d5fe", new (ExerciseCategory.Core, CoreExerciseName.SingleLegCircles) },
 		/* Leg Lift */ { "7a5f7d80783f4b77b44dad8d6a0d2fae", new (ExerciseCategory.HipRaise, HipRaiseExerciseName.LegLift)},
+		/* Leg Pull Front */ { "25e2db583cf14e2c9056b9d96abfd914", new (ExerciseCategory.Plank, PlankExerciseName.PlankWithLegLift) },
 		/* Leg Raise */ { "281e8c9d6d874bb9a1fc1fb9deac0c9b", new (ExerciseCategory.LegRaise, LegRaiseExerciseName.LyingStraightLegRaise) },
 		/* Lunge Jump */ { "5e848323f12343c3a12f36358d56234b", new (ExerciseCategory.Plyo, PlyoExerciseName.AlternatingJumpLunge) },
 
 		// M
+		/* March */ { "34634dbd7b064923b533e8dcd6a86c20", new (ExerciseCategory.WarmUp, WarmUpExerciseName.MarchingInPlace) },
 		/* Marching Farmer Carry */ { "3f672cb7180348878dc56d4b3c354268", new (ExerciseCategory.Carry, CarryExerciseName.FarmersWalk) },
 		/* Marching Overhead Carry */ { "4b396dcfda9148b0b0c430c495e6703b", new (ExerciseCategory.Carry, CarryExerciseName.OverheadCarry) },
+		/* Mermaid Stretch */ { "f4f166f4a8134a9abd91aba524ba88ca", new (ExerciseCategory.Move, MoveExerciseName.MermaidStretch) },
 		/* Mountain Climber */ { "b16ea86247b34c9e814b074a757524f5", new (ExerciseCategory.Plank, PlankExerciseName.MountainClimber) },
 
 		// N
@@ -158,6 +168,7 @@ public static class ExerciseMapping
 		// O
 		/* Oblique Crunch */ { "f52100cb5df44c7795ac9d7a09e4d0b9", new (ExerciseCategory.Crunch, CrunchExerciseName.BicycleCrunch) },
 		/* Oblique Heel Tap */ { "d5ec25fe793f4318a6891607bd3c9259", new (ExerciseCategory.Crunch, CoreExerciseName.SideBend) },
+		/* Offset Squat */ { "e95ba17532ec483b802f670477a0e1da", new (ExerciseCategory.Squat, SquatExerciseName.DumbbellSquat) },
 		/* Offset Push Up */ { "b5d8c5e2e78c49d497f67b03e39e9582", new (ExerciseCategory.PushUp, PushUpExerciseName.PushUp) },
 		/* Open Lateral Raise */ { "00046ee377554425866b0a1963b98589", new (ExerciseCategory.LateralRaise, LateralRaiseExerciseName.SeatedLateralRaise) },
 		/* Overhead Carry */ { "12057d5f9e144913a824bcae5706966c", new (ExerciseCategory.Carry, CarryExerciseName.OverheadCarry) },
@@ -184,6 +195,7 @@ public static class ExerciseMapping
 		/* Renegade Row */ { "ed9adea36e77459dab7c189884ceb7ab", new (ExerciseCategory.Row, RowExerciseName.RenegadeRow) },
 		/* Reverse Plank */ { "6e51ce9b6fb4450eb3345fe8243c88ac", new (ExerciseCategory.Plank, PlankExerciseName.LyingReversePlank) },
 		/* Roll Up */ { "0b853e45afb04c31968b20fc7deaa718", new (ExerciseCategory.Core, CoreExerciseName.RollUp) },
+		/* Rolling Like A Ball */ { "4a029f7f66a147e2b5ff56bfe4132218", new (ExerciseCategory.Core, CoreExerciseName.Rolling) },
 		/* Row */ { "165ed4b439204800b9d88d85363f0609", new (ExerciseCategory.Row, RowExerciseName.DumbbellRow) },
 		/* Romanian Deadlift */ { "a17b8d35d1264a2fbabe3ab28df458dc", new (ExerciseCategory.Deadlift, DeadliftExerciseName.DumbbellDeadlift) },// RDL exists in Connect but not in SDK definition
 		/* Runners Lunge */ { "3ca0b431086245a4b896b5a3f97f316f", new (ExerciseCategory.Lunge, LungeExerciseName.RunnersLungeToBalance) },
@@ -220,6 +232,7 @@ public static class ExerciseMapping
 		/* Superhuman */ { "88bd5bda699a46a3977381bfc2e968e3", new (ExerciseCategory.Hyperextension, HyperextensionExerciseName.SupermanFromFloor) },
 		/* Supinated Row */ { "34dd5f694fd44d15bb0eead604dfebae", new (ExerciseCategory.Row, RowExerciseName.ReverseGripBarbellRow) },
 		/* Swan Dive */ { "5cdc102ef0644da5a64a46df3110702b", new (ExerciseCategory.Core, CoreExerciseName.Swan) },
+		/* Swan Prep */ { "5697fb9e1ff74e0ea372d62e8b32d62f", new (ExerciseCategory.Core, CoreExerciseName.Swan) },
 		/* Swimming */ { "3b45dfc47bab4880ab4a8deaacb2b5a8", new (ExerciseCategory.Core, CoreExerciseName.Swimming) },
 
 		// T
@@ -228,10 +241,12 @@ public static class ExerciseMapping
 		/* Tall Kneeling Side Bend */ { "6be91da1de1c49f4b34bf358bdbf3bbc", new (ExerciseCategory.Crunch, CrunchExerciseName.StandingSideCrunch) },
 		/* Tate Press */ { "01f1e64df5c543e489801b1cf1808f33", new (ExerciseCategory.TricepsExtension, TricepsExtensionExerciseName.DumbbellLyingTricepsExtension) },
 		/* Teaser */ { "7716941202de4e89b369a62df8f93847", new (ExerciseCategory.Core, CoreExerciseName.Teaser) },
+		/* Tick Tock */ { "ec8415d086fc4646a51878f47dd03e8a", new (ExerciseCategory.Move, MoveExerciseName.TickTockSideRoll) },
 		/* Traveling Squat */ { "bf640f6353e747e590d405804bc76652", new (ExerciseCategory.Squat, SquatExerciseName.Squat) },
 		/* Tricep Dip */ { "0a983b7dfca7400a92761380ff9d351a", new (ExerciseCategory.TricepsExtension, TricepsExtensionExerciseName.BodyWeightDip) },
 		/* Tricep Kickback */ { "da89d743904640d58e8b3f667f08783c", new (ExerciseCategory.TricepsExtension, TricepsExtensionExerciseName.DumbbellKickback) },
 		/* Tuck up */ { "3069e7ba28b84005b71c16a3781dda8d", new (ExerciseCategory.SitUp, SitUpExerciseName.BentKneeVUp) },
+		/* Turkish Get-Up */ { "9932c03f00ba4d80b061812229666838", new (ExerciseCategory.Core, CoreExerciseName.TurkishGetUp) },
 		/* Tricep Push Up */ { "d463a4dc0cf640e0a58f3aa058c5b1a0", new (ExerciseCategory.PushUp, PushUpExerciseName.PushUp) },
 		/* Twisting Curl */ { "63c9c4d795974109854a188318cf10e5", new (ExerciseCategory.Curl, CurlExerciseName.StandingAlternatingDumbbellCurls) },
 		/* Twisting Mountain Climber */ { "cc70d143627c45e5b64e2cb116619899", new (ExerciseCategory.Plank, PlankExerciseName.CrossBodyMountainClimber) },

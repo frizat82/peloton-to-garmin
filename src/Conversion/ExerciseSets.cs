@@ -15,6 +15,13 @@ public static class ExerciseSets
 {
 	private static readonly ILogger _logger = LogContext.ForStatic("ExerciseSets");
 
+	/// <summary>
+	/// Garmin Connect lists exercise sets on strength, yoga and Pilates activities.
+	/// Watches without a Pilates activity record Peloton Pilates classes as yoga.
+	/// </summary>
+	public static bool AppliesTo(SubSport? subSport) =>
+		subSport is SubSport.StrengthTraining or SubSport.Yoga or SubSport.Pilates;
+
 	public static List<SetMesg> Build(ICollection<P2GExercise> exercises, Dynastream.Fit.DateTime startTime, int defaultSecondsPerRep)
 	{
 		using var tracing = Tracing.Trace($"{nameof(ExerciseSets)}.{nameof(Build)}");
@@ -38,7 +45,7 @@ public static class ExerciseSets
 
 				if (!ExerciseMapping.StrengthExerciseMappings.TryGetValue(p2gExercise.Id, out exercise))
 				{
-					_logger.Information($"Found Peloton Strength exercise with no Garmin mapping: {p2gExercise.Name} {p2gExercise.Id}");
+					_logger.Information($"Found Peloton exercise with no Garmin mapping: {p2gExercise.Name} {p2gExercise.Id}");
 					continue;
 				}
 			}
